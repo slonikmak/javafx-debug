@@ -86,41 +86,18 @@ curl -X POST http://127.0.0.1:<PORT>/mcp \
 
 ## Connecting to LLM Agents
 
-This library supports two transport modes: **HTTP** and **STDIO**.
+This library uses **HTTP** transport with a secure token.
 
-### 1. Claude Desktop (Native STDIO - Recommended)
+### 1. Claude Desktop (via HTTP Bridge)
 
-The simplest way to connect to Claude Desktop is using native STDIO transport:
-
-1.  Build your JavaFX application as an executable JAR
-2.  Add to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "javafx-debug": {
-      "command": "java",
-      "args": [
-        "-Dmcp.ui=true",
-        "-Dmcp.transport=stdio",
-        "-jar",
-        "/path/to/your-app.jar"
-      ]
-    }
-  }
-}
-```
-
-### 2. HTTP Transport (You start the app manually)
-
-Use this when you want to start your JavaFX app yourself and have agents connect to it.
+Since Claude Desktop uses STDIO by default, the recommended way to connect is via the MCP bridge:
 
 1.  Start your JavaFX application with `mcp.ui=true`:
     ```bash
     java -Dmcp.ui=true -jar your-app.jar
     ```
 2.  Note the **Endpoint** and **Token** from console output
-3.  Connect Claude Desktop via the MCP bridge:
+3.  Add to your `claude_desktop_config.json`:
 
 ```json
 {
@@ -140,13 +117,10 @@ Use this when you want to start your JavaFX app yourself and have agents connect
 
 > Replace `<PORT>` and `<TOKEN>` with values from step 2.
 
-For manual testing, use the [requests.http](requests/requests.http) file.
-
-### 3. Custom Agents / SDKs
+### 2. Custom Agents / SDKs
 
 For custom agents using MCP SDKs:
 - **HTTP**: Use `HttpClientTransport` with `Authorization: Bearer <TOKEN>` header
-- **STDIO**: Spawn the Java process with `-Dmcp.transport=stdio`
 
 ---
 
@@ -217,7 +191,7 @@ Takes a screenshot.
 | Property | Default | Description |
 |----------|---------|-------------|
 | `mcp.ui` | `false` | Enable/disable |
-| `mcp.transport` | `http` | Transport mode: `http` or `stdio` |
+| `mcp.transport` | `http` | Transport mode: `http` |
 | `mcp.bind` | `127.0.0.1` | Bind address (HTTP only) |
 | `mcp.port` | `0` (auto) | Port (HTTP only) |
 | `mcp.token` | (generated) | Auth token (HTTP only) |

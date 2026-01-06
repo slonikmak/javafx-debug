@@ -42,7 +42,7 @@ public final class McpJavafxDebug {
 public interface McpJavafxHandle extends AutoCloseable {
   McpJavafxConfig config();
   boolean isRunning();
-  String endpoint(); // например "http://127.0.0.1:49321" или "stdio"
+  String endpoint(); // например "http://127.0.0.1:49321"
   @Override void close();
 }
 ```
@@ -79,7 +79,7 @@ public record SnapshotOptions(
 **Системные свойства** (для `startFromSystemProperties()`):
 
 * `mcp.ui` (`true/false`)
-* `mcp.transport` (`http`)
+* `mcp.transport` (`http` default)
 * `mcp.bind` (default `127.0.0.1`)
 * `mcp.port` (`0` default)
 * `mcp.token` (optional)

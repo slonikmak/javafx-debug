@@ -66,7 +66,6 @@ public record McpJavafxConfig(
     private static Transport parseTransport(String value) {
         return switch (value.toLowerCase()) {
             case "http", "http_local" -> Transport.HTTP_LOCAL;
-            case "stdio" -> Transport.STDIO;
             default -> Transport.HTTP_LOCAL;
         };
     }

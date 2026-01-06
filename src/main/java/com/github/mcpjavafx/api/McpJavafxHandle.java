@@ -17,8 +17,7 @@ public interface McpJavafxHandle extends AutoCloseable {
     boolean isRunning();
 
     /**
-     * Returns the endpoint URL (e.g., "http://127.0.0.1:49321") or "stdio" for
-     * stdio transport.
+     * Returns the endpoint URL (e.g., "http://127.0.0.1:49321").
      */
     String endpoint();
 

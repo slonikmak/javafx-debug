@@ -1,7 +1,6 @@
 package com.github.mcpjavafx.api;
 
 import com.github.mcpjavafx.transport.http.HttpMcpServer;
-import com.github.mcpjavafx.transport.stdio.StdioMcpBridge;
 import com.github.mcpjavafx.util.McpLogger;
 
 import java.io.IOException;
@@ -54,18 +53,13 @@ public final class McpJavafxDebug {
         var token = config.effectiveToken();
         var handle = switch (config.transport()) {
             case HTTP_LOCAL -> startHttpServer(config, token);
-            case STDIO -> startStdioServer(config);
         };
 
         INSTANCE.set(handle);
 
-        if (config.transport() == Transport.HTTP_LOCAL) {
-            McpLogger.info("MCP JavaFX Debug enabled");
-            McpLogger.info("Endpoint: " + handle.endpoint());
-            McpLogger.info("Token: " + token);
-        } else {
-            McpLogger.toStderr("MCP JavaFX Debug enabled (STDIO)");
-        }
+        McpLogger.info("MCP JavaFX Debug enabled");
+        McpLogger.info("Endpoint: " + handle.endpoint());
+        McpLogger.info("Token: " + token);
 
         return handle;
     }
@@ -107,22 +101,6 @@ public final class McpJavafxDebug {
         } catch (IOException e) {
             throw new RuntimeException("Failed to start MCP HTTP server", e);
         }
-    }
-
-    private static McpJavafxHandle startStdioServer(McpJavafxConfig config) {
-        var bridge = new StdioMcpBridge(config);
-        var handle = new StdioHandle(config, bridge);
-
-        // Start STDIO server in background thread (it blocks on stdin)
-        Thread.ofVirtual().name("mcp-stdio-server").start(() -> {
-            try {
-                bridge.start();
-            } catch (Exception e) {
-                McpLogger.toStderr("STDIO server error: " + e.getMessage());
-            }
-        });
-
-        return handle;
     }
 
     /**
@@ -206,45 +184,6 @@ public final class McpJavafxDebug {
         @Override
         public void close() {
             // No-op
-        }
-    }
-
-    /**
-     * Handle implementation for STDIO transport.
-     */
-    private static class StdioHandle implements McpJavafxHandle {
-        private final McpJavafxConfig config;
-        private final StdioMcpBridge bridge;
-
-        StdioHandle(McpJavafxConfig config, StdioMcpBridge bridge) {
-            this.config = config;
-            this.bridge = bridge;
-        }
-
-        @Override
-        public McpJavafxConfig config() {
-            return config;
-        }
-
-        @Override
-        public boolean isRunning() {
-            return bridge.isRunning();
-        }
-
-        @Override
-        public String endpoint() {
-            return "stdio";
-        }
-
-        @Override
-        public String token() {
-            return null; // STDIO does not use tokens
-        }
-
-        @Override
-        public void close() {
-            bridge.close();
-            INSTANCE.compareAndSet(this, null);
         }
     }
 }
