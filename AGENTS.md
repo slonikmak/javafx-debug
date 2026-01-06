@@ -1,0 +1,71 @@
+# AGENTS.md — MCP JavaFX Debug Server
+
+This document is for LLM Agents that will use the `mcp-javafx-debug` tools to interact with and debug JavaFX applications.
+
+## System Overview
+You are connected to a JavaFX application via an MCP server. You can inspect the **Scene Graph** (UI tree), search for specific elements, and perform UI actions (clicks, typing, etc.).
+
+### Core Concepts
+1.  **Scene Graph**: Hierarchical tree of UI components (Nodes).
+2.  **NodeRef**: A reference to a node. Includes:
+    *   `uid`: A stable identifier (e.g., `u-123`). **Always prefer UIDs for actions.**
+    *   `path`: A structural path (e.g., `/stages[0]/scene/root/VBox[0]/Button[2]`). Useful for debugging structure but less stable than UIDs.
+3.  **Stages**: Top-level windows. By default, most tools use the `focused` stage.
+
+---
+
+## Available Tools
+
+### 1. `ui.getSnapshot`
+**Purpose**: Get the current state of the UI tree.
+*   **Key Inputs**: `depth` (limit tree depth), `stage` (focused/all), `include` (bounds, properties, etc.).
+*   **Best Practice**: Start with this to understand what windows are open and what the overall structure is.
+
+### 2. `ui.query`
+**Purpose**: Find specific elements without scanning the whole tree.
+*   **Selectors**:
+    *   `css`: standard JavaFX CSS selectors (e.g., `#myButton`, `.label`).
+    *   `text`: Search by visible text (exact or contains).
+    *   `predicate`: Complex filtering (id, type, visible, enabled).
+*   **Best Practice**: Use `text` query to find buttons or labels by their visible names.
+
+### 3. `ui.getNode`
+**Purpose**: Get full details for a single node.
+*   **Best Practice**: Use this when you have a `uid` from a previous snapshot and need deeper info (like all FX properties) that wasn't included in the summary snapshot.
+
+### 4. `ui.perform`
+**Purpose**: Interact with the UI.
+*   **Actions**: `focus`, `click`, `typeText` (into focused), `setText` (direct value), `pressKey`, `scroll`.
+*   **Batching**: You can send multiple actions in one call.
+*   **Best Practice**: Always set `awaitUiIdle: true` (default) to ensure the UI has processed your interaction before you take the next snapshot.
+
+### 5. `ui.screenshot`
+**Purpose**: Visual confirmation.
+*   **Output**: Base64 encoded PNG.
+*   **Best Practice**: Take a screenshot after a complex interaction to verify the UI state visually.
+
+---
+
+## Interaction Strategies
+
+### Finding a button and clicking it
+1.  Call `ui.query` with `selector: { "text": "Login" }`.
+2.  Identify the `uid` from the match results.
+3.  Call `ui.perform` with a `click` action targeting that `uid`.
+
+### Entering text into a form
+1.  Call `ui.query` with `selector: { "css": "#usernameField" }`.
+2.  Call `ui.perform` with `setText` or `focus` + `typeText`.
+
+### Debugging a missing element
+If an element is missing from a `ui.getSnapshot` result:
+1.  Check if `depth` was too low.
+2.  Call `ui.getSnapshot` with `stage: "all"` to see if it's in a different popup/window.
+3.  Check visibility/opacity properties of parents.
+
+---
+
+## Environment Info
+*   **Schema**: `mcp-javafx-ui/1.0`
+*   **Platform**: JavaFX 21+ / Java 21+
+*   **Transport**: HTTP (MCP)

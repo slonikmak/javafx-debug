@@ -1,0 +1,120 @@
+### Health Check (Hardcoded for first test)
+GET http://127.0.0.1:62064/health
+Accept: application/json
+
+### Health Check (Using Variables)
+# Note: In IntelliJ, select 'dev' environment or use @port syntax
+GET http://127.0.0.1:{{port}}/health
+Accept: application/json
+
+### UI Snapshot
+# Capture the entire scene graph
+POST http://127.0.0.1:{{port}}/mcp
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tool": "ui.getSnapshot",
+  "input": {
+    "stage": "focused",
+    "depth": 50,
+    "include": {
+      "bounds": true,
+      "localToScreen": true,
+      "properties": true,
+      "virtualization": true,
+      "accessibility": true
+    }
+  }
+}
+
+### Query Nodes (CSS)
+# Find nodes by CSS selector
+POST http://127.0.0.1:{{port}}/mcp
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tool": "ui.query",
+  "input": {
+    "selector": {
+      "css": ".button"
+    },
+    "limit": 10
+  }
+}
+
+### Query Nodes (Text)
+# Find nodes by text content
+POST http://127.0.0.1:{{port}}/mcp
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tool": "ui.query",
+  "input": {
+    "selector": {
+      "text": "Submit",
+      "match": "contains"
+    }
+  }
+}
+
+### Get Node Details
+# Get full info for a specific node by its UID
+# Replace target.ref.uid with a real UID from getSnapshot
+POST http://127.0.0.1:{{port}}/mcp
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tool": "ui.getNode",
+  "input": {
+    "ref": {
+      "uid": "u-1"
+    },
+    "includeChildren": true
+  }
+}
+
+### Perform Actions
+# Focus, set text, and click a button
+# Update UIDs based on getSnapshot output
+POST http://127.0.0.1:{{port}}/mcp
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tool": "ui.perform",
+  "input": {
+    "awaitUiIdle": true,
+    "actions": [
+      {
+        "type": "focus",
+        "target": { "ref": { "uid": "u-input-1" } }
+      },
+      {
+        "type": "setText",
+        "target": { "ref": { "uid": "u-input-1" } },
+        "text": "Antigravity Agent"
+      },
+      {
+        "type": "click",
+        "target": { "ref": { "uid": "u-button-1" } }
+      }
+    ]
+  }
+}
+
+### Screenshot
+# Take a screenshot of the focused stage
+POST http://127.0.0.1:{{port}}/mcp
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "tool": "ui.screenshot",
+  "input": {
+    "stageIndex": -1
+  }
+}
