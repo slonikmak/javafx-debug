@@ -2,6 +2,7 @@ package com.github.mcpjavafx.core.capture;
 
 import com.github.mcpjavafx.api.SnapshotOptions;
 import com.github.mcpjavafx.core.fx.Fx;
+import com.github.mcpjavafx.core.fx.NodeRefService;
 import com.github.mcpjavafx.core.model.*;
 
 import javafx.scene.Node;
@@ -20,9 +21,8 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class SceneGraphSnapshotter {
 
-    private static final AtomicLong UID_COUNTER = new AtomicLong(0);
-
     private final int fxTimeoutMs;
+    private final NodeRefService nodeRefService = new NodeRefService();
 
     public SceneGraphSnapshotter(int fxTimeoutMs) {
         this.fxTimeoutMs = fxTimeoutMs;
@@ -79,12 +79,12 @@ public class SceneGraphSnapshotter {
     }
 
     private UiSnapshot captureOnFxThread(StageMode mode, Integer stageIndex, SnapshotOptions options) {
-        var stages = getSortedStages();
+        var stages = nodeRefService.getSortedStages();
 
         if (stages.isEmpty()) {
             return new UiSnapshot(
                     UiSnapshot.SCHEMA_VERSION,
-                    Instant.now(),
+                    Instant.now().toString(),
                     captureAppInfo(),
                     null,
                     List.of());
@@ -102,7 +102,7 @@ public class SceneGraphSnapshotter {
 
         return new UiSnapshot(
                 UiSnapshot.SCHEMA_VERSION,
-                Instant.now(),
+                Instant.now().toString(),
                 captureAppInfo(),
                 focusInfo,
                 stageInfos);
@@ -112,13 +112,7 @@ public class SceneGraphSnapshotter {
      * Returns all showing stages sorted deterministically.
      */
     private List<Stage> getSortedStages() {
-        return Window.getWindows().stream()
-                .filter(w -> w instanceof Stage stage && stage.isShowing())
-                .map(w -> (Stage) w)
-                .sorted(Comparator
-                        .comparing((Stage s) -> s.getTitle() == null ? "" : s.getTitle())
-                        .thenComparingInt(System::identityHashCode))
-                .toList();
+        return nodeRefService.getSortedStages();
     }
 
     private List<Stage> selectStages(List<Stage> stages, StageMode mode, Integer stageIndex) {
@@ -160,7 +154,7 @@ public class SceneGraphSnapshotter {
                 var focusOwner = stage.getScene().getFocusOwner();
                 if (focusOwner != null) {
                     return new UiSnapshot.FocusInfo(
-                            createNodeRef(focusOwner, buildPath(focusOwner, stages)),
+                            nodeRefService.forNode(focusOwner, i),
                             new UiSnapshot.FocusedWindow(i));
                 }
                 return new UiSnapshot.FocusInfo(null, new UiSnapshot.FocusedWindow(i));
@@ -194,7 +188,7 @@ public class SceneGraphSnapshotter {
     }
 
     private UiNode captureNode(Node node, int stageIndex, SnapshotOptions options, int depth) {
-        var ref = createNodeRef(node, buildNodePath(node, stageIndex));
+        var ref = nodeRefService.forNode(node, stageIndex);
 
         // Children
         List<UiNode> children = List.of();
@@ -249,57 +243,15 @@ public class SceneGraphSnapshotter {
     }
 
     private NodeRef createNodeRef(Node node, String path) {
-        var uid = getOrCreateUid(node);
-        return new NodeRef(path, uid);
+        return nodeRefService.forNode(node);
     }
 
     private String getOrCreateUid(Node node) {
-        var props = node.getProperties();
-        var existing = props.get(NodeRef.UID_PROPERTY_KEY);
-        if (existing instanceof String uid) {
-            return uid;
-        }
-        var newUid = "u-" + Long.toString(UID_COUNTER.incrementAndGet(), 36);
-        props.put(NodeRef.UID_PROPERTY_KEY, newUid);
-        return newUid;
+        return nodeRefService.getOrCreateUid(node);
     }
 
     private String buildNodePath(Node node, int stageIndex) {
-        var parts = new ArrayList<String>();
-        var current = node;
-
-        while (current != null) {
-            var parent = current.getParent();
-            if (parent != null) {
-                int index = getChildIndex(parent, current);
-                parts.addFirst(current.getClass().getSimpleName() + "[" + index + "]");
-            } else {
-                // This is the root
-                parts.addFirst("root");
-            }
-            current = parent;
-        }
-
-        parts.addFirst("scene");
-        parts.addFirst("stages[" + stageIndex + "]");
-
-        return "/" + String.join("/", parts);
-    }
-
-    private String buildPath(Node node, List<Stage> stages) {
-        var scene = node.getScene();
-        if (scene == null)
-            return null;
-
-        var window = scene.getWindow();
-        if (!(window instanceof Stage stage))
-            return null;
-
-        int stageIndex = stages.indexOf(stage);
-        if (stageIndex < 0)
-            return null;
-
-        return buildNodePath(node, stageIndex);
+        return nodeRefService.buildPath(node, stageIndex);
     }
 
     private int getChildIndex(Parent parent, Node child) {
@@ -442,11 +394,21 @@ public class SceneGraphSnapshotter {
             }
         }
 
-        if (tooltip == null && userData == null) {
+        // Safe serialization for userData to avoid Jackson issues with arbitrary objects
+        Object safeUserData = null;
+        if (userData != null) {
+            if (userData instanceof String || userData instanceof Number || userData instanceof Boolean) {
+                safeUserData = userData;
+            } else {
+                safeUserData = userData.toString();
+            }
+        }
+
+        if (tooltip == null && safeUserData == null) {
             return null;
         }
 
-        return new FxProperties(tooltip, userData, null);
+        return new FxProperties(tooltip, safeUserData, null);
     }
 
     private VirtualizationInfo captureVirtualization(Node node) {

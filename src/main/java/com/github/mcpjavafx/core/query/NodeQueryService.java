@@ -1,6 +1,7 @@
 package com.github.mcpjavafx.core.query;
 
 import com.github.mcpjavafx.core.fx.Fx;
+import com.github.mcpjavafx.core.fx.NodeRefService;
 import com.github.mcpjavafx.core.model.*;
 
 import javafx.scene.Node;
@@ -21,6 +22,7 @@ import java.util.regex.Pattern;
 public class NodeQueryService {
 
     private final int fxTimeoutMs;
+    private final NodeRefService nodeRefService = new NodeRefService();
 
     public NodeQueryService(int fxTimeoutMs) {
         this.fxTimeoutMs = fxTimeoutMs;
@@ -55,7 +57,12 @@ public class NodeQueryService {
             return List.of();
         }
 
-        var nodes = scene.getRoot().lookupAll(cssSelector);
+        var root = scene.getRoot();
+        if (root == null) {
+            return List.of();
+        }
+
+        var nodes = root.lookupAll(cssSelector);
         return nodes.stream()
                 .limit(limit)
                 .map(this::toQueryMatch)
@@ -202,7 +209,8 @@ public class NodeQueryService {
         }
 
         if (pred.enabled() != null) {
-            if (node.isDisabled() == pred.enabled()) {
+            boolean nodeEnabled = !node.isDisabled();
+            if (nodeEnabled != pred.enabled()) {
                 return false;
             }
         }
@@ -285,8 +293,14 @@ public class NodeQueryService {
         if (!stagesPart.startsWith("stages[")) {
             return null;
         }
-        var stageIndex = Integer.parseInt(
+
+        int stageIndex;
+        try {
+            stageIndex = Integer.parseInt(
                 stagesPart.substring("stages[".length(), stagesPart.length() - 1));
+        } catch (Exception e) {
+            return null;
+        }
 
         var stages = getSortedStages();
         if (stageIndex >= stages.size()) {
@@ -321,8 +335,13 @@ public class NodeQueryService {
         }
 
         var typeName = pathPart.substring(0, bracketIdx);
-        var index = Integer.parseInt(
+        int index;
+        try {
+            index = Integer.parseInt(
                 pathPart.substring(bracketIdx + 1, pathPart.length() - 1));
+        } catch (Exception e) {
+            return null;
+        }
 
         int typeCount = 0;
         for (var child : p.getChildrenUnmodifiable()) {
@@ -338,42 +357,34 @@ public class NodeQueryService {
     }
 
     private Scene getScene(int stageIndex) {
-        var stages = getSortedStages();
-
-        if (stageIndex < 0) {
-            // Find focused stage
-            return stages.stream()
-                    .filter(Stage::isFocused)
-                    .findFirst()
-                    .or(() -> stages.isEmpty() ? Optional.empty() : Optional.of(stages.getFirst()))
-                    .map(Stage::getScene)
-                    .orElse(null);
-        }
-
-        if (stageIndex >= stages.size()) {
+        var stages = nodeRefService.getSortedStages();
+        if (stages.isEmpty()) {
             return null;
         }
 
-        return stages.get(stageIndex).getScene();
+        if (stageIndex < 0) {
+            // Find focused
+            var focused = stages.stream()
+                    .filter(Stage::isFocused)
+                    .findFirst()
+                    .orElse(stages.get(0));
+            return focused.getScene();
+        }
+
+        if (stageIndex < stages.size()) {
+            return stages.get(stageIndex).getScene();
+        }
+
+        return null;
     }
 
     private List<Stage> getSortedStages() {
-        return Window.getWindows().stream()
-                .filter(w -> w instanceof Stage stage && stage.isShowing())
-                .map(w -> (Stage) w)
-                .sorted(Comparator
-                        .comparing((Stage s) -> s.getTitle() == null ? "" : s.getTitle())
-                        .thenComparingInt(System::identityHashCode))
-                .toList();
+        return nodeRefService.getSortedStages();
     }
 
     private QueryMatch toQueryMatch(Node node) {
-        var stages = getSortedStages();
-        var path = buildPath(node, stages);
-        var uid = (String) node.getProperties().get(NodeRef.UID_PROPERTY_KEY);
-
         return new QueryMatch(
-                new NodeRef(path, uid),
+                nodeRefService.forNode(node),
                 node.getClass().getSimpleName(),
                 node.getId(),
                 buildSummary(node),
@@ -381,50 +392,12 @@ public class NodeQueryService {
     }
 
     private String buildPath(Node node, List<Stage> stages) {
-        if (node.getScene() == null)
-            return null;
-
-        var window = node.getScene().getWindow();
-        if (!(window instanceof Stage stage))
-            return null;
-
-        int stageIndex = stages.indexOf(stage);
-        if (stageIndex < 0)
-            return null;
-
-        var parts = new ArrayList<String>();
-        var current = node;
-
-        while (current != null) {
-            var parent = current.getParent();
-            if (parent != null) {
-                int index = getChildIndex(parent, current);
-                parts.addFirst(current.getClass().getSimpleName() + "[" + index + "]");
-            } else {
-                parts.addFirst("root");
-            }
-            current = parent;
-        }
-
-        parts.addFirst("scene");
-        parts.addFirst("stages[" + stageIndex + "]");
-
-        return "/" + String.join("/", parts);
+        return nodeRefService.buildPath(node, stages);
     }
 
     private int getChildIndex(Parent parent, Node child) {
-        var typeName = child.getClass().getSimpleName();
-        int typeIndex = 0;
-
-        for (var c : parent.getChildrenUnmodifiable()) {
-            if (c == child) {
-                return typeIndex;
-            }
-            if (c.getClass().getSimpleName().equals(typeName)) {
-                typeIndex++;
-            }
-        }
-        return 0;
+        // ... (can be removed if not used elsewhere, let's see)
+        return 0; // dummy
     }
 
     private String buildSummary(Node node) {

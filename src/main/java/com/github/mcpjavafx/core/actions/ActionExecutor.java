@@ -1,6 +1,7 @@
 package com.github.mcpjavafx.core.actions;
 
 import com.github.mcpjavafx.core.fx.Fx;
+import com.github.mcpjavafx.core.fx.NodeRefService;
 import com.github.mcpjavafx.core.model.NodeRef;
 import com.github.mcpjavafx.core.query.NodeQueryService;
 import javafx.embed.swing.SwingFXUtils;
@@ -29,6 +30,7 @@ public class ActionExecutor {
 
     private final int fxTimeoutMs;
     private final NodeQueryService queryService;
+    private final NodeRefService nodeRefService = new NodeRefService();
     private Robot robot;
 
     public ActionExecutor(int fxTimeoutMs, NodeQueryService queryService) {
@@ -125,9 +127,26 @@ public class ActionExecutor {
      */
     public ActionResult typeText(String text) {
         return Fx.exec(() -> {
+            var stage = getStage(-1);
+            if (stage != null && stage.getScene() != null) {
+                var focusOwner = stage.getScene().getFocusOwner();
+                if (focusOwner instanceof TextInputControl input) {
+                    input.insertText(input.getCaretPosition(), text);
+                    return ActionResult.success("typeText");
+                }
+            }
+
             var robot = getRobot();
             for (char c : text.toCharArray()) {
-                robot.keyType(KeyCode.getKeyCode(String.valueOf(c).toUpperCase()));
+                String s = String.valueOf(c);
+                if (" ".equals(s)) {
+                    robot.keyType(KeyCode.SPACE);
+                    continue;
+                }
+                var keyCode = KeyCode.getKeyCode(s.toUpperCase());
+                if (keyCode != null) {
+                    robot.keyType(keyCode);
+                }
             }
             return ActionResult.success("typeText");
         }, fxTimeoutMs);
@@ -275,19 +294,13 @@ public class ActionExecutor {
     }
 
     private Stage getStage(int stageIndex) {
-        var stages = Window.getWindows().stream()
-                .filter(w -> w instanceof Stage stage && stage.isShowing())
-                .map(w -> (Stage) w)
-                .sorted(Comparator
-                        .comparing((Stage s) -> s.getTitle() == null ? "" : s.getTitle())
-                        .thenComparingInt(System::identityHashCode))
-                .toList();
+        var stages = nodeRefService.getSortedStages();
 
         if (stageIndex < 0) {
             return stages.stream()
                     .filter(Stage::isFocused)
                     .findFirst()
-                    .orElse(stages.isEmpty() ? null : stages.getFirst());
+                    .orElse(stages.isEmpty() ? null : stages.get(0));
         }
 
         return stageIndex < stages.size() ? stages.get(stageIndex) : null;

@@ -2,6 +2,8 @@ package com.github.mcpjavafx.transport.http;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.github.mcpjavafx.api.McpJavafxConfig;
 import com.github.mcpjavafx.mcp.McpToolAdapter;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
@@ -54,6 +56,8 @@ public class HttpMcpServer {
         // forward-compatible capabilities fields that the current SDK schema
         // doesn't model yet (e.g. capabilities.elicitation.*).
         var objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         var jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
@@ -86,6 +90,10 @@ public class HttpMcpServer {
         var context = new ServletContextHandler(ServletContextHandler.NO_SESSIONS);
         context.setContextPath("/");
 
+        // Unified body caching filter for all subsequent filters
+        var cachedBodyFilterHolder = new FilterHolder(new CachedBodyFilter());
+        context.addFilter(cachedBodyFilterHolder, MCP_ENDPOINT + "/*", EnumSet.of(DispatcherType.REQUEST));
+
         // Add MCP servlet from SDK transport
         var mcpServletHolder = new ServletHolder("mcp", transport);
         context.addServlet(mcpServletHolder, MCP_ENDPOINT + "/*");
@@ -94,8 +102,8 @@ public class HttpMcpServer {
         var healthServletHolder = new ServletHolder("health", new HealthServlet(config));
         context.addServlet(healthServletHolder, HEALTH_ENDPOINT);
 
-        // Log incoming MCP requests (before auth filter/transport)
-        var logFilterHolder = new FilterHolder(new RequestLoggingFilter());
+        // Log incoming MCP requests
+        var logFilterHolder = new FilterHolder(new RequestLoggingFilter(config));
         context.addFilter(logFilterHolder, MCP_ENDPOINT + "/*", EnumSet.of(DispatcherType.REQUEST));
 
         // Sanitize initialize payloads for older SDK compatibility

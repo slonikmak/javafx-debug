@@ -16,6 +16,7 @@ import java.util.UUID;
  * @param snapshotDefaults default snapshot options
  * @param fxTimeoutMs      timeout for FX thread operations
  * @param serverShutdownMs timeout for server shutdown
+ * @param logRequests      whether to log full MCP requests including body
  */
 public record McpJavafxConfig(
         boolean enabled,
@@ -27,14 +28,15 @@ public record McpJavafxConfig(
         boolean authEnabled,
         SnapshotOptions snapshotDefaults,
         int fxTimeoutMs,
-        int serverShutdownMs) {
+        int serverShutdownMs,
+        boolean logRequests) {
     public static final int DEFAULT_FX_TIMEOUT_MS = 5000;
     public static final int DEFAULT_SERVER_SHUTDOWN_MS = 2000;
     public static final String DEFAULT_BIND_HOST = "127.0.0.1";
 
     public static McpJavafxConfig defaults() {
         return new McpJavafxConfig(
-                true,
+                false,
                 Transport.HTTP_LOCAL,
                 DEFAULT_BIND_HOST,
                 0,
@@ -43,9 +45,9 @@ public record McpJavafxConfig(
                 true,
                 SnapshotOptions.DEFAULT,
                 DEFAULT_FX_TIMEOUT_MS,
-                DEFAULT_SERVER_SHUTDOWN_MS);
+                DEFAULT_SERVER_SHUTDOWN_MS,
+                false);
     }
-
     public static Builder builder() {
         return new Builder();
     }
@@ -64,9 +66,9 @@ public record McpJavafxConfig(
                 Boolean.parseBoolean(System.getProperty("mcp.auth", "true")),
                 parseSnapshotOptions(),
                 Integer.parseInt(System.getProperty("mcp.fxTimeout", String.valueOf(DEFAULT_FX_TIMEOUT_MS))),
-                DEFAULT_SERVER_SHUTDOWN_MS);
+                DEFAULT_SERVER_SHUTDOWN_MS,
+                Boolean.parseBoolean(System.getProperty("mcp.http.logRequests", "false")));
     }
-
     private static Transport parseTransport(String value) {
         return switch (value.toLowerCase()) {
             case "http", "http_local" -> Transport.HTTP_LOCAL;
@@ -93,7 +95,7 @@ public record McpJavafxConfig(
     }
 
     public static class Builder {
-        private boolean enabled = true;
+        private boolean enabled = false;
         private Transport transport = Transport.HTTP_LOCAL;
         private String bindHost = DEFAULT_BIND_HOST;
         private int port = 0;
@@ -103,6 +105,7 @@ public record McpJavafxConfig(
         private SnapshotOptions snapshotDefaults = SnapshotOptions.DEFAULT;
         private int fxTimeoutMs = DEFAULT_FX_TIMEOUT_MS;
         private int serverShutdownMs = DEFAULT_SERVER_SHUTDOWN_MS;
+        private boolean logRequests = false;
 
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
@@ -143,21 +146,29 @@ public record McpJavafxConfig(
             this.snapshotDefaults = Objects.requireNonNull(snapshotDefaults);
             return this;
         }
-
         public Builder fxTimeoutMs(int fxTimeoutMs) {
             this.fxTimeoutMs = fxTimeoutMs;
             return this;
         }
 
-        public Builder serverShutdownMs(int serverShutdownMs) {
-            this.serverShutdownMs = serverShutdownMs;
+        public Builder logRequests(boolean logRequests) {
+            this.logRequests = logRequests;
             return this;
         }
 
         public McpJavafxConfig build() {
             return new McpJavafxConfig(
-                    enabled, transport, bindHost, port, token,
-                    allowActions, authEnabled, snapshotDefaults, fxTimeoutMs, serverShutdownMs);
+                    enabled,
+                    transport,
+                    bindHost,
+                    port,
+                    token,
+                    allowActions,
+                    authEnabled,
+                    snapshotDefaults,
+                    fxTimeoutMs,
+                    serverShutdownMs,
+                    logRequests);
         }
     }
 }

@@ -5,19 +5,11 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.FilterConfig;
-import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletException;
-import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletRequestWrapper;
 
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 
 /**
  * Sanitizes MCP initialize payloads to avoid SDK incompatibilities.
@@ -34,26 +26,17 @@ public class RequestSanitizingFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        if (!(request instanceof HttpServletRequest)) {
+        if (!(request instanceof CachedBodyRequestWrapper wrapped)) {
             chain.doFilter(request, response);
             return;
         }
 
-        var httpRequest = (HttpServletRequest) request;
-        if (!"POST".equalsIgnoreCase(httpRequest.getMethod())) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        var contentType = httpRequest.getContentType();
-        if (contentType == null || !contentType.toLowerCase().contains("application/json")) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        var bodyBytes = httpRequest.getInputStream().readAllBytes();
+        var bodyBytes = wrapped.getBody();
         var sanitized = sanitize(bodyBytes);
-        chain.doFilter(new CachedBodyRequest(httpRequest, sanitized), response);
+        if (sanitized != bodyBytes) {
+            wrapped.setBody(sanitized);
+        }
+        chain.doFilter(wrapped, response);
     }
 
     @Override
@@ -111,45 +94,5 @@ public class RequestSanitizingFilter implements Filter {
             case "ui.screenshot" -> "ui_screenshot";
             default -> name;
         };
-    }
-
-    private static final class CachedBodyRequest extends HttpServletRequestWrapper {
-        private final byte[] cachedBody;
-
-        CachedBodyRequest(HttpServletRequest request, byte[] cachedBody) {
-            super(request);
-            this.cachedBody = cachedBody;
-        }
-
-        @Override
-        public ServletInputStream getInputStream() {
-            var byteStream = new ByteArrayInputStream(cachedBody);
-            return new ServletInputStream() {
-                @Override
-                public int read() {
-                    return byteStream.read();
-                }
-
-                @Override
-                public boolean isFinished() {
-                    return byteStream.available() == 0;
-                }
-
-                @Override
-                public boolean isReady() {
-                    return true;
-                }
-
-                @Override
-                public void setReadListener(ReadListener readListener) {
-                    // Not used for sync reads
-                }
-            };
-        }
-
-        @Override
-        public BufferedReader getReader() {
-            return new BufferedReader(new InputStreamReader(getInputStream(), StandardCharsets.UTF_8));
-        }
     }
 }

@@ -156,6 +156,18 @@ class McpClientStreamableHttpE2eTest extends ApplicationTest {
         @SuppressWarnings("unchecked")
         var text = (Map<String, Object>) labelNode.get("text");
         assertEquals("Hello, TestFX!", text.get("label"));
+
+        // Test typeText (new logic)
+        structuredOutput(client.callTool(new CallToolRequest(
+                "ui_perform",
+                Map.of("actions", List.of(
+                        Map.of("type", "focus", "target", Map.of("ref", inputMatch.get("ref"))),
+                        Map.of("type", "setText", "target", Map.of("ref", inputMatch.get("ref")), "text", ""),
+                        Map.of("type", "typeText", "text", "Typed"))))));
+
+        var inputAfterType = querySingle(Map.of("css", "#input"));
+        // summary uses buildSummary which includes type and id, but for TextField it includes [text=...]
+        assertTrue(inputAfterType.get("summary").toString().contains("text=Typed"), "Input should contain typed text");
     }
 
     @SuppressWarnings("unchecked")

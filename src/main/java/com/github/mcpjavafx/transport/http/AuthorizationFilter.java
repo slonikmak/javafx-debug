@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletRequestWrapper;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Locale;
@@ -110,11 +111,17 @@ public class AuthorizationFilter implements Filter {
     }
 
     private boolean isAllowedOrigin(String origin) {
-        // Allow localhost origins only (DNS rebinding protection)
-        return origin.startsWith("http://localhost")
-                || origin.startsWith("http://127.0.0.1")
-                || origin.startsWith("https://localhost")
-                || origin.startsWith("https://127.0.0.1");
+        if (origin == null || origin.isEmpty()) {
+            return true;
+        }
+
+        try {
+            var uri = URI.create(origin);
+            var host = uri.getHost();
+            return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "::1".equals(host);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static boolean isSessionHeader(String headerName) {

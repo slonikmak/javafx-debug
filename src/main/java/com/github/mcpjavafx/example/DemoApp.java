@@ -1,6 +1,7 @@
 package com.github.mcpjavafx.example;
 
 import com.github.mcpjavafx.api.McpJavafxDebug;
+import com.github.mcpjavafx.api.McpJavafxHandle;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -17,10 +18,12 @@ import javafx.stage.Stage;
  */
 public class DemoApp extends Application {
 
+    private McpJavafxHandle mcpHandle;
+
     @Override
     public void start(Stage stage) {
-        // Enable MCP debug from system properties
-        McpJavafxDebug.startFromSystemProperties();
+        // Start MCP server via system properties or defaults
+        mcpHandle = McpJavafxDebug.startFromSystemProperties();
 
         // Build simple UI
         var label = new Label("Hello, MCP!");
@@ -44,6 +47,13 @@ public class DemoApp extends Application {
         stage.setTitle("MCP Demo");
         stage.setScene(scene);
         stage.show();
+    }
+
+    @Override
+    public void stop() {
+        if (mcpHandle != null) {
+            mcpHandle.close();
+        }
     }
 
     public static void main(String[] args) {

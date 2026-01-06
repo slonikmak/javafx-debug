@@ -12,7 +12,6 @@ import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpServletRequestWrapper;
 
 import java.io.IOException;
 import java.io.BufferedReader;
@@ -36,30 +35,17 @@ public class LoggingSetLevelFilter implements Filter {
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        if (!(request instanceof HttpServletRequest) || !(response instanceof HttpServletResponse)) {
+        if (!(request instanceof CachedBodyRequestWrapper wrapped) || !(response instanceof HttpServletResponse httpResponse)) {
             chain.doFilter(request, response);
             return;
         }
 
-        var httpRequest = (HttpServletRequest) request;
-        if (!"POST".equalsIgnoreCase(httpRequest.getMethod())) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        var contentType = httpRequest.getContentType();
-        if (contentType == null || !contentType.toLowerCase().contains("application/json")) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        var bodyBytes = httpRequest.getInputStream().readAllBytes();
+        var bodyBytes = wrapped.getBody();
         if (!isLoggingSetLevel(bodyBytes)) {
-            chain.doFilter(new CachedBodyRequest(httpRequest, bodyBytes), response);
+            chain.doFilter(wrapped, response);
             return;
         }
 
-        var httpResponse = (HttpServletResponse) response;
         httpResponse.setStatus(HttpServletResponse.SC_OK);
         httpResponse.setContentType("application/json; charset=utf-8");
         httpResponse.getOutputStream().write(ack(bodyBytes));
@@ -100,45 +86,5 @@ public class LoggingSetLevelFilter implements Filter {
         }
         response.set("result", MAPPER.valueToTree(Map.of()));
         return MAPPER.writeValueAsBytes(response);
-    }
-
-    private static final class CachedBodyRequest extends HttpServletRequestWrapper {
-        private final byte[] cachedBody;
-
-        CachedBodyRequest(HttpServletRequest request, byte[] cachedBody) {
-            super(request);
-            this.cachedBody = cachedBody;
-        }
-
-        @Override
-        public ServletInputStream getInputStream() {
-            var byteStream = new ByteArrayInputStream(cachedBody);
-            return new ServletInputStream() {
-                @Override
-                public int read() {
-                    return byteStream.read();
-                }
-
-                @Override
-                public boolean isFinished() {
-                    return byteStream.available() == 0;
-                }
-
-                @Override
-                public boolean isReady() {
-                    return true;
-                }
-
-                @Override
-                public void setReadListener(ReadListener readListener) {
-                    // Not used for sync reads
-                }
-            };
-        }
-
-        @Override
-        public BufferedReader getReader() {
-            return new BufferedReader(new InputStreamReader(getInputStream(), StandardCharsets.UTF_8));
-        }
     }
 }
