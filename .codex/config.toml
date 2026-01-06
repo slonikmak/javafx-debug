@@ -1,0 +1,5 @@
+model = "gpt-5.2-codex"
+model_reasoning_effort = "medium"
+
+[mcp_servers.javafx-debugger]
+url = "http://127.0.0.1:55667/mcp"

@@ -3,13 +3,11 @@ package com.github.mcpjavafx.core.actions;
 import com.github.mcpjavafx.core.fx.Fx;
 import com.github.mcpjavafx.core.model.NodeRef;
 import com.github.mcpjavafx.core.query.NodeQueryService;
-
-import javafx.application.Platform;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
-import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
+import javafx.scene.control.ButtonBase;
 import javafx.scene.control.TextInputControl;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
@@ -83,6 +81,15 @@ public class ActionExecutor {
             var node = queryService.findByRef(ref);
             if (node == null) {
                 return ActionResult.failure("click", "Node not found: " + ref);
+            }
+
+            bringWindowToFront(node);
+
+            // Prefer deterministic UI-level activation for common controls.
+            // This avoids flakiness when the window isn't focused or is covered by other windows.
+            if (node instanceof ButtonBase button) {
+                button.fire();
+                return ActionResult.success("click");
             }
 
             var screenBounds = getScreenBounds(node);
@@ -185,6 +192,8 @@ public class ActionExecutor {
                 return ActionResult.failure("scroll", "Node not found: " + ref);
             }
 
+            bringWindowToFront(node);
+
             var screenBounds = getScreenBounds(node);
             if (screenBounds == null) {
                 return ActionResult.failure("scroll", "Cannot get screen bounds for node");
@@ -199,6 +208,28 @@ public class ActionExecutor {
 
             return ActionResult.success("scroll");
         }, fxTimeoutMs);
+    }
+
+    private void bringWindowToFront(Node node) {
+        try {
+            if (node.getScene() == null) {
+                return;
+            }
+
+            var window = node.getScene().getWindow();
+            if (window == null) {
+                return;
+            }
+
+            if (window instanceof Stage stage) {
+                stage.toFront();
+                stage.requestFocus();
+            } else {
+                window.requestFocus();
+            }
+        } catch (Exception ignored) {
+            // Best-effort only; Robot actions will still be attempted.
+        }
     }
 
     /**

@@ -189,26 +189,44 @@
 
 ## 4) MCP tools: обязательный набор
 
-Ниже — “логические” сигнатуры. В MCP это оформляется как tools с JSON input/output.
+Ниже — сигнатуры tools (JSON input/output).
 
-### 4.1 `ui.getSnapshot`
+Примечание про имена tools: в документации часто удобно говорить “логически” (`ui.getSnapshot`),
+но MCP server в этой библиотеке экспортирует имена в `snake_case`:
+
+* `ui_get_snapshot` (логически: `ui.getSnapshot`)
+* `ui_query` (логически: `ui.query`)
+* `ui_get_node` (логически: `ui.getNode`)
+* `ui_perform` (логически: `ui.perform`)
+* `ui_screenshot` (логически: `ui.screenshot`)
+
+### 4.1 `ui_get_snapshot`
 
 **Input**
 
 ```json
 {
-  "stage": "focused|primary|all|index",
+  "stage": "focused|primary|all",
   "stageIndex": 0,
+  "mode": "full|compact",
   "depth": 50,
   "include": {
     "bounds": true,
     "localToScreen": true,
-    "styles": false,
     "properties": false,
-    "virtualization": true
+    "virtualization": true,
+    "accessibility": false
   }
 }
 ```
+
+**Смысл `mode`:**
+
+* `mode="full"` — детальный снимок, defaults берутся из server config (`snapshotDefaults`).
+* `mode="compact"` — “LLM-friendly” режим: меньшая глубина (если `depth` не задан) и выключенные
+  тяжёлые секции по умолчанию (bounds/localToScreen/properties/virtualization/accessibility).
+
+`include.*` и `depth` (если переданы) переопределяют дефолты режима.
 
 **Output**
 
@@ -220,7 +238,7 @@
 * `MCP_UI_NO_STAGES`
 * `MCP_UI_TIMEOUT`
 
-### 4.2 `ui.query`
+### 4.2 `ui_query`
 
 Ищет узлы и возвращает “короткие” описания + ссылки.
 
@@ -228,15 +246,28 @@
 
 ```json
 {
-  "scope": { "stage": "focused", "stageIndex": 0 },
+  "scope": { "stage": "focused|index", "stageIndex": 0 },
   "selector": {
     "css": "#okButton",
     "text": null,
+    "match": "contains|equals|regex",
     "predicate": null
   },
   "limit": 50
 }
 ```
+
+`scope`:
+
+* `stage: "focused"` (по умолчанию) — искать в активном окне.
+* `stage: "index"` + `stageIndex` — искать в конкретном stage.
+
+`selector`:
+
+* `css` — JavaFX CSS selector (через `Scene.lookupAll`).
+* `text` — поиск по отображаемому тексту (`Labeled`, `TextInputControl`, `Text`).
+  `match` управляет сравнением (case-insensitive для `contains`, и `regex` — по шаблону).
+* `predicate` — структурированный фильтр.
 
 **Output**
 
@@ -254,7 +285,7 @@
 }
 ```
 
-### 4.3 `ui.getNode`
+### 4.3 `ui_get_node`
 
 Получить подробности по узлу.
 
@@ -273,7 +304,7 @@
 * `MCP_UI_NODE_NOT_FOUND`
 * `MCP_UI_STALE_REF` (если path/uid не резолвится)
 
-### 4.4 `ui.perform`
+### 4.4 `ui_perform`
 
 Унифицированные действия (удобно для LLM).
 
@@ -284,6 +315,7 @@
   "actions": [
     { "type": "focus", "target": { "ref": { "path": "...", "uid": "..." } } },
     { "type": "click", "target": { "ref": { "path": "...", "uid": "..." } } },
+    { "type": "click", "x": 100.0, "y": 200.0 },
     { "type": "typeText", "text": "Hello" },
     { "type": "setText", "target": { "ref": { "path": "...", "uid": "..." } }, "text": "Hello" },
     { "type": "pressKey", "key": "ENTER", "modifiers": ["CTRL"] },
@@ -293,6 +325,8 @@
   "timeoutMs": 5000
 }
 ```
+
+Адресация узлов: `target.ref.uid` предпочтительнее (стабильнее), `path` — fallback.
 
 **Output**
 
@@ -311,12 +345,12 @@
 * `MCP_UI_ACTION_FAILED` (+ `details`)
 * `MCP_UI_TIMEOUT`
 
-### 4.5 `ui.screenshot` (опционально, но крайне полезно)
+### 4.5 `ui_screenshot` (опционально, но крайне полезно)
 
 **Input**
 
 ```json
-{ "stage": "focused", "format": "png", "scale": 1.0 }
+{ "stageIndex": 0 }
 ```
 
 **Output**

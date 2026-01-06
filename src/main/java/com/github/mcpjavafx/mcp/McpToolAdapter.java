@@ -13,23 +13,38 @@ import com.github.mcpjavafx.core.fx.Fx;
 import com.github.mcpjavafx.core.model.*;
 import com.github.mcpjavafx.core.query.NodeQueryService;
 import com.github.mcpjavafx.core.query.QueryPredicate;
+import io.modelcontextprotocol.server.McpStatelessServerFeatures;
+import io.modelcontextprotocol.server.McpStatelessSyncServer;
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import io.modelcontextprotocol.spec.McpSchema.Content;
+import io.modelcontextprotocol.spec.McpSchema.Tool;
+import io.modelcontextprotocol.spec.McpSchema.JsonSchema;
 
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
- * Registry and executor for MCP tools.
+ * Adapter that registers MCP tools with the official MCP SDK server.
+ * 
+ * <p>
+ * This class bridges the existing tool implementation with SDK's tool
+ * registration API.
+ * </p>
  */
-public class McpToolRegistry {
+public class McpToolAdapter {
 
-    private final ObjectMapper mapper;
+    private static final Logger LOG = Logger.getLogger(McpToolAdapter.class.getName());
+
     private final McpJavafxConfig config;
+    private final ObjectMapper mapper;
     private final SceneGraphSnapshotter snapshotter;
     private final NodeQueryService queryService;
     private final ActionExecutor actionExecutor;
 
     private static final int COMPACT_DEFAULT_DEPTH = 8;
 
-    public McpToolRegistry(McpJavafxConfig config) {
+    public McpToolAdapter(McpJavafxConfig config) {
         this.config = config;
         this.mapper = createMapper();
         this.snapshotter = new SceneGraphSnapshotter(config.fxTimeoutMs());
@@ -46,43 +61,263 @@ public class McpToolRegistry {
     }
 
     /**
-     * Returns list of available tools.
+     * Registers all available tools with the MCP server.
      */
-    public List<String> getToolNames() {
-        var tools = new ArrayList<>(List.of(
-                "ui.getSnapshot",
-                "ui.query",
-                "ui.getNode"));
+    public void registerTools(McpStatelessSyncServer server) {
+        server.addTool(createGetSnapshotTool());
+        server.addTool(createQueryTool());
+        server.addTool(createGetNodeTool());
 
         if (config.allowActions()) {
-            tools.add("ui.perform");
-            tools.add("ui.screenshot");
+            server.addTool(createPerformTool());
+            server.addTool(createScreenshotTool());
         }
-
-        return tools;
     }
 
-    /**
-     * Executes a tool and returns the result as JSON.
-     */
-    public String execute(String tool, JsonNode input) {
-        if (!config.enabled()) {
-            return errorResponse(ErrorCode.MCP_UI_NOT_ENABLED);
+    private JsonNode toArgumentsNode(Object raw) {
+        var node = mapper.valueToTree(raw);
+
+        // Some transports/SDK versions may pass the full `params` object to the tool handler
+        // (e.g. { name, arguments }) instead of passing the `arguments` object directly.
+        // Support both shapes.
+        var argsNode = node.get("arguments");
+        if (argsNode != null && argsNode.isObject()) {
+            return argsNode;
         }
 
+        return node;
+    }
+
+    private McpStatelessServerFeatures.SyncToolSpecification createGetSnapshotTool() {
+        var includeSchema = Map.<String, Object>of(
+                "type", "object",
+                "properties", Map.of(
+                        "bounds", Map.of("type", "boolean"),
+                        "localToScreen", Map.of("type", "boolean"),
+                        "properties", Map.of("type", "boolean"),
+                        "virtualization", Map.of("type", "boolean"),
+                        "accessibility", Map.of("type", "boolean")),
+                "additionalProperties", false);
+
+        var inputSchema = objectSchema(
+                Map.of(
+                        "stage", Map.of("type", "string", "enum", List.of("focused", "primary", "all")),
+                        "stageIndex", Map.of("type", "integer"),
+                        "mode", Map.of("type", "string", "enum", List.of("full", "compact")),
+                        "depth", Map.of("type", "integer"),
+                        "include", includeSchema),
+                List.of());
+
+        return new McpStatelessServerFeatures.SyncToolSpecification(
+                tool(
+                        "ui_get_snapshot",
+                        "Capture a UI scene graph snapshot. Use mode=compact to reduce payload; use include.* to opt into bounds/properties/accessibility.",
+                        inputSchema),
+                (exchange, arguments) -> {
+                    try {
+                        var input = toArgumentsNode(arguments);
+                        var result = executeGetSnapshot(input);
+                        return toStructuredResult(result);
+                    } catch (Exception e) {
+                        LOG.log(Level.WARNING, "Error executing ui.getSnapshot", e);
+                        return toStructuredResult(errorJson(e));
+                    }
+                });
+    }
+
+        private McpStatelessServerFeatures.SyncToolSpecification createQueryTool() {
+        var scopeSchema = Map.<String, Object>of(
+            "type", "object",
+            "properties", Map.of(
+                "stage", Map.of("type", "string", "enum", List.of("focused", "index")),
+                "stageIndex", Map.of("type", "integer")),
+            "additionalProperties", false);
+
+        var selectorSchema = Map.<String, Object>of(
+            "type", "object",
+            "properties", Map.of(
+                "css", Map.of("type", "string"),
+                "text", Map.of("type", "string"),
+                "match", Map.of("type", "string", "enum", List.of("contains", "equals", "regex")),
+                "predicate", Map.of("type", "object")),
+            "additionalProperties", true);
+
+        var inputSchema = objectSchema(
+            Map.of(
+                "scope", scopeSchema,
+                "selector", selectorSchema,
+                "limit", Map.of("type", "integer")),
+            List.of("selector"));
+
+        return new McpStatelessServerFeatures.SyncToolSpecification(
+            tool(
+                "ui_query",
+                "Find UI nodes by selector. selector.css uses Scene.lookupAll; selector.text searches visible text with match=contains|equals|regex; selector.predicate supports structured filters.",
+                inputSchema),
+            (exchange, arguments) -> {
+                try {
+                var input = toArgumentsNode(arguments);
+                var result = executeQuery(input);
+                return toStructuredResult(result);
+                } catch (Exception e) {
+                LOG.log(Level.WARNING, "Error executing ui.query", e);
+                return toStructuredResult(errorJson(e));
+                }
+            });
+        }
+
+    private McpStatelessServerFeatures.SyncToolSpecification createGetNodeTool() {
+        var refSchema = Map.<String, Object>of(
+                "type", "object",
+                "properties", Map.of(
+                        "uid", Map.of("type", "string"),
+                        "path", Map.of("type", "string")),
+                "additionalProperties", false);
+
+        var inputSchema = objectSchema(
+                Map.of(
+                        "ref", refSchema,
+                        "includeChildren", Map.of("type", "boolean")),
+                List.of("ref"));
+
+        return new McpStatelessServerFeatures.SyncToolSpecification(
+                tool(
+                        "ui_get_node",
+                        "Get full details for a single node identified by ref.uid (preferred) or ref.path.",
+                        inputSchema),
+                (exchange, arguments) -> {
+                    try {
+                        var input = toArgumentsNode(arguments);
+                        var result = executeGetNode(input);
+                        return toStructuredResult(result);
+                    } catch (Exception e) {
+                        LOG.log(Level.WARNING, "Error executing ui.getNode", e);
+                        return toStructuredResult(errorJson(e));
+                    }
+                });
+    }
+
+        private McpStatelessServerFeatures.SyncToolSpecification createPerformTool() {
+        var refSchema = Map.<String, Object>of(
+            "type", "object",
+            "properties", Map.of(
+                "uid", Map.of("type", "string"),
+                "path", Map.of("type", "string")),
+            "additionalProperties", false);
+
+        var targetSchema = Map.<String, Object>of(
+            "type", "object",
+            "properties", Map.of(
+                "ref", refSchema),
+            "additionalProperties", false);
+
+        var actionSchema = Map.<String, Object>of(
+            "type", "object",
+            "properties", Map.of(
+                "type", Map.of("type", "string", "enum", List.of("focus", "click", "typeText", "setText", "pressKey", "scroll")),
+                "target", targetSchema,
+                "text", Map.of("type", "string"),
+                "key", Map.of("type", "string"),
+                "modifiers", Map.of("type", "array", "items", Map.of("type", "string")),
+                "deltaY", Map.of("type", "number"),
+                "x", Map.of("type", "number"),
+                "y", Map.of("type", "number")),
+            "required", List.of("type"),
+            "additionalProperties", true);
+
+        var inputSchema = objectSchema(
+            Map.of(
+                "actions", Map.of("type", "array", "items", actionSchema),
+                "awaitUiIdle", Map.of("type", "boolean"),
+                "timeoutMs", Map.of("type", "integer")),
+            List.of("actions"));
+
+        return new McpStatelessServerFeatures.SyncToolSpecification(
+            tool(
+                "ui_perform",
+                "Perform UI actions on the JavaFX application thread. Each action has {type, ...}. Most actions address nodes via target.ref.uid (preferred) or target.ref.path.",
+                inputSchema),
+            (exchange, arguments) -> {
+                try {
+                var input = toArgumentsNode(arguments);
+                var result = executePerform(input);
+                return toStructuredResult(result);
+                } catch (Exception e) {
+                LOG.log(Level.WARNING, "Error executing ui.perform", e);
+                return toStructuredResult(errorJson(e));
+                }
+            });
+        }
+
+    private McpStatelessServerFeatures.SyncToolSpecification createScreenshotTool() {
+        var inputSchema = objectSchema(
+                Map.of("stageIndex", Map.of("type", "integer")),
+                List.of());
+
+        return new McpStatelessServerFeatures.SyncToolSpecification(
+            tool("ui_screenshot", "Capture a PNG screenshot. stageIndex=-1 means focused stage.", inputSchema),
+                (exchange, arguments) -> {
+                    try {
+                        var input = toArgumentsNode(arguments);
+                        var result = executeScreenshot(input);
+                        return toStructuredResult(result);
+                    } catch (Exception e) {
+                        LOG.log(Level.WARNING, "Error executing ui.screenshot", e);
+                        return toStructuredResult(errorJson(e));
+                    }
+                });
+    }
+
+    private Tool tool(String name, String description, JsonSchema inputSchema) {
+        // SDK 0.17.0 Tool is a record with full metadata; keep minimal fields populated.
+        return Tool.builder()
+                .name(name)
+                .title(name)
+                .description(description)
+                .inputSchema(inputSchema)
+                // Non-null outputSchema makes the SDK expect structuredContent in CallToolResult.
+                // We always return structuredContent ({"output":...} or {"error":...}).
+                .outputSchema(objectOutputSchema())
+                .meta(Map.of("schemaVersion", "2"))
+                .build();
+    }
+
+    private Map<String, Object> objectOutputSchema() {
+        // Intentionally permissive schema:
+        //   success: { "output": <any> }
+        //   error:   { "error": { code, message, ... } }
+        return Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "output", Map.of(),
+                        "error", Map.of()),
+                "additionalProperties", true);
+    }
+
+    private CallToolResult toStructuredResult(String json) {
         try {
-            return switch (tool) {
-                case "ui.getSnapshot" -> executeGetSnapshot(input);
-                case "ui.query" -> executeQuery(input);
-                case "ui.getNode" -> executeGetNode(input);
-                case "ui.perform" -> executePerform(input);
-                case "ui.screenshot" -> executeScreenshot(input);
-                default -> errorResponse(ErrorCode.MCP_UI_INTERNAL, "Unknown tool: " + tool);
-            };
+            @SuppressWarnings("unchecked")
+            var structured = (Map<String, Object>) mapper.readValue(json, Map.class);
+            var isError = structured.containsKey("error");
+            return new CallToolResult(List.<Content>of(), isError, structured, Map.of());
         } catch (Exception e) {
-            return errorResponse(ErrorCode.MCP_UI_INTERNAL, e.getMessage());
+            var error = McpError.of(ErrorCode.MCP_UI_INTERNAL,
+                    e.getMessage() != null ? e.getMessage() : "Unknown error");
+            return new CallToolResult(List.<Content>of(), true, Map.of("error", error), Map.of());
         }
     }
+
+    private JsonSchema objectSchema(Map<String, Object> properties, List<String> required) {
+        return new JsonSchema(
+                "object",
+                properties,
+                required != null ? required : List.of(),
+                true,
+                null,
+                null);
+    }
+
+    // ============ Tool Implementations ============
 
     private String executeGetSnapshot(JsonNode input) throws Exception {
         var stageModeNode = input.get("stage");
@@ -205,11 +440,10 @@ public class McpToolRegistry {
             results.add(result);
 
             if (!result.ok()) {
-                break; // Stop on first failure
+                break;
             }
         }
 
-        // Await UI idle if requested
         if (input.path("awaitUiIdle").asBoolean(true)) {
             var timeoutMs = input.path("timeoutMs").asInt(config.fxTimeoutMs());
             Fx.awaitUiIdle(timeoutMs);
@@ -283,8 +517,10 @@ public class McpToolRegistry {
         return successResponse(Map.of(
                 "contentType", "image/png",
                 "dataBase64", base64));
-
     }
+
+    // ============ Helper methods ============
+
     private SceneGraphSnapshotter.StageMode parseStageMode(String mode) {
         return switch (mode.toLowerCase()) {
             case "primary" -> SceneGraphSnapshotter.StageMode.PRIMARY;
@@ -326,6 +562,7 @@ public class McpToolRegistry {
 
         return builder.build();
     }
+
     private NodeRef parseRef(JsonNode node) {
         var pathNode = node.get("path");
         var uidNode = node.get("uid");
@@ -347,6 +584,16 @@ public class McpToolRegistry {
             var error = McpError.of(code, message);
             return mapper.writeValueAsString(Map.of("error", error));
         } catch (Exception e) {
+            return "{\"error\":{\"code\":\"MCP_UI_INTERNAL\",\"message\":\"" + e.getMessage() + "\"}}";
+        }
+    }
+
+    private String errorJson(Exception e) {
+        try {
+            return mapper.writeValueAsString(Map.of("error", Map.of(
+                    "code", "MCP_UI_INTERNAL",
+                    "message", e.getMessage() != null ? e.getMessage() : "Unknown error")));
+        } catch (Exception ex) {
             return "{\"error\":{\"code\":\"MCP_UI_INTERNAL\",\"message\":\"" + e.getMessage() + "\"}}";
         }
     }

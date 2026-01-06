@@ -49,6 +49,35 @@ public class SceneGraphSnapshotter {
         return Fx.exec(() -> captureOnFxThread(mode, stageIndex, options), fxTimeoutMs);
     }
 
+    /**
+     * Captures a snapshot for a single node (and optionally its direct children).
+     *
+     * <p>
+     * This is used by get-node flows to avoid capturing a full stage tree.
+     * </p>
+     */
+    public UiNode captureNodeDetails(Node node, boolean includeChildren, SnapshotOptions options) {
+        Objects.requireNonNull(node, "node");
+        Objects.requireNonNull(options, "options");
+
+        return Fx.exec(() -> {
+            var stages = getSortedStages();
+            var stageIndex = resolveStageIndex(stages, node);
+
+            var depth = includeChildren ? 1 : 0;
+            var effectiveOptions = SnapshotOptions.builder()
+                    .depth(depth)
+                    .includeBounds(options.includeBounds())
+                    .includeLocalToScreen(options.includeLocalToScreen())
+                    .includeProperties(options.includeProperties())
+                    .includeVirtualization(options.includeVirtualization())
+                    .includeAccessibility(options.includeAccessibility())
+                    .build();
+
+            return captureNode(node, stageIndex, effectiveOptions, 0);
+        }, fxTimeoutMs);
+    }
+
     private UiSnapshot captureOnFxThread(StageMode mode, Integer stageIndex, SnapshotOptions options) {
         var stages = getSortedStages();
 
@@ -193,6 +222,30 @@ public class SceneGraphSnapshotter {
                 options.includeProperties() ? captureFxProperties(node) : null,
                 options.includeVirtualization() ? captureVirtualization(node) : null,
                 children);
+    }
+
+    private int resolveStageIndex(List<Stage> stages, Node node) {
+        try {
+            var scene = node.getScene();
+            if (scene == null) {
+                return 0;
+            }
+            var window = scene.getWindow();
+            if (window instanceof Stage stage) {
+                var idx = stages.indexOf(stage);
+                return idx >= 0 ? idx : 0;
+            }
+
+            // Fallback: match by scene instance.
+            for (int i = 0; i < stages.size(); i++) {
+                var s = stages.get(i);
+                if (s.getScene() == scene) {
+                    return i;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return 0;
     }
 
     private NodeRef createNodeRef(Node node, String path) {

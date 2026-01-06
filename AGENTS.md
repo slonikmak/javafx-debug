@@ -16,12 +16,12 @@ You are connected to a JavaFX application via an MCP server. You can inspect the
 
 ## Available Tools
 
-### 1. `ui.getSnapshot`
+### 1. `ui_get_snapshot` (legacy alias: `ui.getSnapshot`)
 **Purpose**: Get the current state of the UI tree.
-*   **Key Inputs**: `depth` (limit tree depth), `stage` (focused/all), `include` (bounds, properties, etc.).
-*   **Best Practice**: Start with this to understand what windows are open and what the overall structure is.
+*   **Key Inputs**: `stage` (focused/primary/all), `mode` (full/compact), `depth`, `include` (bounds, properties, etc.).
+*   **Best Practice**: Prefer `mode: "compact"` first; only request full bounds/properties when needed.
 
-### 2. `ui.query`
+### 2. `ui_query` (legacy alias: `ui.query`)
 **Purpose**: Find specific elements without scanning the whole tree.
 *   **Selectors**:
     *   `css`: standard JavaFX CSS selectors (e.g., `#myButton`, `.label`).
@@ -29,17 +29,17 @@ You are connected to a JavaFX application via an MCP server. You can inspect the
     *   `predicate`: Complex filtering (id, type, visible, enabled).
 *   **Best Practice**: Use `text` query to find buttons or labels by their visible names.
 
-### 3. `ui.getNode`
+### 3. `ui_get_node` (legacy alias: `ui.getNode`)
 **Purpose**: Get full details for a single node.
 *   **Best Practice**: Use this when you have a `uid` from a previous snapshot and need deeper info (like all FX properties) that wasn't included in the summary snapshot.
 
-### 4. `ui.perform`
+### 4. `ui_perform` (legacy alias: `ui.perform`)
 **Purpose**: Interact with the UI.
 *   **Actions**: `focus`, `click`, `typeText` (into focused), `setText` (direct value), `pressKey`, `scroll`.
 *   **Batching**: You can send multiple actions in one call.
 *   **Best Practice**: Always set `awaitUiIdle: true` (default) to ensure the UI has processed your interaction before you take the next snapshot.
 
-### 5. `ui.screenshot`
+### 5. `ui_screenshot` (legacy alias: `ui.screenshot`)
 **Purpose**: Visual confirmation.
 *   **Output**: Base64 encoded PNG.
 *   **Best Practice**: Take a screenshot after a complex interaction to verify the UI state visually.
@@ -49,18 +49,18 @@ You are connected to a JavaFX application via an MCP server. You can inspect the
 ## Interaction Strategies
 
 ### Finding a button and clicking it
-1.  Call `ui.query` with `selector: { "text": "Login" }`.
+1.  Call `ui_query` with `selector: { "text": "Login", "match": "contains" }`.
 2.  Identify the `uid` from the match results.
-3.  Call `ui.perform` with a `click` action targeting that `uid`.
+3.  Call `ui_perform` with a `click` action targeting that `uid`.
 
 ### Entering text into a form
-1.  Call `ui.query` with `selector: { "css": "#usernameField" }`.
-2.  Call `ui.perform` with `setText` or `focus` + `typeText`.
+1.  Call `ui_query` with `selector: { "css": "#usernameField" }`.
+2.  Call `ui_perform` with `setText` or `focus` + `typeText`.
 
 ### Debugging a missing element
 If an element is missing from a `ui.getSnapshot` result:
 1.  Check if `depth` was too low.
-2.  Call `ui.getSnapshot` with `stage: "all"` to see if it's in a different popup/window.
+2.  Call `ui_get_snapshot` with `stage: "all"` to see if it's in a different popup/window.
 3.  Check visibility/opacity properties of parents.
 
 ---

@@ -3,7 +3,6 @@ package com.github.mcpjavafx.api;
 import com.github.mcpjavafx.transport.http.HttpMcpServer;
 import com.github.mcpjavafx.util.McpLogger;
 
-import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -98,7 +97,7 @@ public final class McpJavafxDebug {
             var server = new HttpMcpServer(config, token);
             var port = server.start();
             return new HttpHandle(config, server, port, token);
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException("Failed to start MCP HTTP server", e);
         }
     }

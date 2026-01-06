@@ -12,6 +12,7 @@ import java.util.UUID;
  * @param port             port to bind to (0 = auto-select)
  * @param token            authentication token (null = generate and log)
  * @param allowActions     whether to allow UI actions (click, type, etc.)
+ * @param authEnabled      whether MCP endpoint requires Authorization header
  * @param snapshotDefaults default snapshot options
  * @param fxTimeoutMs      timeout for FX thread operations
  * @param serverShutdownMs timeout for server shutdown
@@ -23,6 +24,7 @@ public record McpJavafxConfig(
         int port,
         String token,
         boolean allowActions,
+        boolean authEnabled,
         SnapshotOptions snapshotDefaults,
         int fxTimeoutMs,
         int serverShutdownMs) {
@@ -37,6 +39,7 @@ public record McpJavafxConfig(
                 DEFAULT_BIND_HOST,
                 0,
                 null,
+                true,
                 true,
                 SnapshotOptions.DEFAULT,
                 DEFAULT_FX_TIMEOUT_MS,
@@ -58,6 +61,7 @@ public record McpJavafxConfig(
                 Integer.parseInt(System.getProperty("mcp.port", "0")),
                 System.getProperty("mcp.token"),
                 Boolean.parseBoolean(System.getProperty("mcp.allowActions", "true")),
+                Boolean.parseBoolean(System.getProperty("mcp.auth", "true")),
                 parseSnapshotOptions(),
                 Integer.parseInt(System.getProperty("mcp.fxTimeout", String.valueOf(DEFAULT_FX_TIMEOUT_MS))),
                 DEFAULT_SERVER_SHUTDOWN_MS);
@@ -95,6 +99,7 @@ public record McpJavafxConfig(
         private int port = 0;
         private String token = null;
         private boolean allowActions = true;
+        private boolean authEnabled = true;
         private SnapshotOptions snapshotDefaults = SnapshotOptions.DEFAULT;
         private int fxTimeoutMs = DEFAULT_FX_TIMEOUT_MS;
         private int serverShutdownMs = DEFAULT_SERVER_SHUTDOWN_MS;
@@ -129,6 +134,11 @@ public record McpJavafxConfig(
             return this;
         }
 
+        public Builder authEnabled(boolean authEnabled) {
+            this.authEnabled = authEnabled;
+            return this;
+        }
+
         public Builder snapshotDefaults(SnapshotOptions snapshotDefaults) {
             this.snapshotDefaults = Objects.requireNonNull(snapshotDefaults);
             return this;
@@ -147,7 +157,7 @@ public record McpJavafxConfig(
         public McpJavafxConfig build() {
             return new McpJavafxConfig(
                     enabled, transport, bindHost, port, token,
-                    allowActions, snapshotDefaults, fxTimeoutMs, serverShutdownMs);
+                    allowActions, authEnabled, snapshotDefaults, fxTimeoutMs, serverShutdownMs);
         }
     }
 }

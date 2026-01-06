@@ -1,4 +1,4 @@
-Ниже спека “простого, но полнофункционального” варианта: одна подключаемая библиотека, которая по флагу поднимает MCP-сервер (локальный HTTP+SSE или WebSocket; но в спеке сделаю transport-абстракцию), даёт tools `ui.getSnapshot/ui.query/ui.getNode/ui.perform/ui.screenshot`, гарантирует FX-thread корректность, детерминизм снимков и базовую безопасность (localhost+token). Всё — без javaagent и без магии: один вызов `install()` или автозапуск через `startFromSystemProperties()`.
+Ниже спека “простого, но полнофункционального” варианта: одна подключаемая библиотека, которая по флагу поднимает MCP-сервер, даёт tools `ui_get_snapshot/ui_query/ui_get_node/ui_perform/ui_screenshot`, гарантирует FX-thread корректность, детерминизм снимков и базовую безопасность (localhost+token). Всё — без javaagent и без магии: один вызов `install()` или автозапуск через `startFromSystemProperties()`.
 
 ---
 
@@ -293,11 +293,11 @@ void Fx.run(Runnable action, int timeoutMs) throws FxTimeoutException;
 
 ### 11.1 Инструменты (обязательные)
 
-* `ui.getSnapshot`
-* `ui.query`
-* `ui.getNode`
-* `ui.perform`
-* `ui.screenshot`
+* `ui_get_snapshot`
+* `ui_query`
+* `ui_get_node`
+* `ui_perform`
+* `ui_screenshot`
 
 ### 11.2 Ошибки
 
@@ -379,10 +379,10 @@ void Fx.run(Runnable action, int timeoutMs) throws FxTimeoutException;
 Библиотека считается “готовой”, если:
 
 * поднимается по `install()` и по `startFromSystemProperties()`,
-* `ui.getSnapshot` возвращает детерминированное дерево с `uid`,
-* `ui.query` находит по `#id` и по тексту,
-* `ui.perform` умеет `click`, `setText`, `typeText`, `pressKey`,
-* (опционально) `ui.screenshot` возвращает png base64,
+* `ui_get_snapshot` возвращает детерминированное дерево с `uid` (предпочитать `mode=compact` для LLM),
+* `ui_query` находит по `#id` и по тексту,
+* `ui_perform` умеет `click`, `setText`, `typeText`, `pressKey`,
+* (опционально) `ui_screenshot` возвращает png base64,
 * все операции UI выполняются на FX-thread и имеют timeout’ы,
 * доступ ограничен localhost + token.
 
