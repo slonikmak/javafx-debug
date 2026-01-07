@@ -180,7 +180,7 @@ public class UiToolsService {
         if (base64 == null) {
             return McpError.of(ErrorCode.MCP_UI_INTERNAL, "Failed to capture screenshot");
         }
-        return Map.of("screenshot", base64);
+        return Map.of("contentType", "image/png", "dataBase64", base64);
     }
 
     public Object wrapException(Exception e) {

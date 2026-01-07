@@ -10,5 +10,5 @@ import java.util.Map;
 public record FxProperties(
         String tooltip,
         Object userData,
-        Map<String, Object> additionalProperties) {
+        Map<String, Object> properties) {
 }

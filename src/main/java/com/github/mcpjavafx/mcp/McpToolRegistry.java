@@ -6,14 +6,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.github.mcpjavafx.api.McpJavafxConfig;
-import com.github.mcpjavafx.core.actions.ActionExecutor;
-import com.github.mcpjavafx.core.capture.SceneGraphSnapshotter;
-import com.github.mcpjavafx.core.fx.Fx;
-import com.github.mcpjavafx.core.model.*;
-import com.github.mcpjavafx.core.query.NodeQueryService;
-import com.github.mcpjavafx.core.query.QueryPredicate;
+import com.github.mcpjavafx.core.model.ErrorCode;
+import com.github.mcpjavafx.core.model.McpError;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Registry and executor for MCP tools.
@@ -43,13 +40,13 @@ public class McpToolRegistry {
      */
     public List<String> getToolNames() {
         var tools = new ArrayList<>(List.of(
-                "ui.getSnapshot",
-                "ui.query",
-                "ui.getNode"));
+                "ui_get_snapshot",
+                "ui_query",
+                "ui_get_node"));
 
         if (config.allowActions()) {
-            tools.add("ui.perform");
-            tools.add("ui.screenshot");
+            tools.add("ui_perform");
+            tools.add("ui_screenshot");
         }
 
         return tools;
@@ -65,11 +62,11 @@ public class McpToolRegistry {
 
         try {
             Object result = switch (tool) {
-                case "ui.getSnapshot" -> toolsService.executeGetSnapshot(input);
-                case "ui.query" -> toolsService.executeQuery(input);
-                case "ui.getNode" -> toolsService.executeGetNode(input);
-                case "ui.perform" -> toolsService.executePerform(input);
-                case "ui.screenshot" -> toolsService.executeScreenshot(input);
+                case "ui_get_snapshot" -> toolsService.executeGetSnapshot(input);
+                case "ui_query" -> toolsService.executeQuery(input);
+                case "ui_get_node" -> toolsService.executeGetNode(input);
+                case "ui_perform" -> toolsService.executePerform(input);
+                case "ui_screenshot" -> toolsService.executeScreenshot(input);
                 default -> McpError.of(ErrorCode.MCP_UI_INTERNAL, "Unknown tool: " + tool);
             };
 

@@ -20,7 +20,7 @@ public record UiSnapshot(
         FocusInfo focus,
         List<StageInfo> stages) {
 
-    public static final String SCHEMA_VERSION = "1.0";
+    public static final String SCHEMA_VERSION = "mcp-javafx-ui/1.0";
 
     /**
      * Application metadata.
