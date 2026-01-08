@@ -42,10 +42,10 @@ public class UiToolsService {
     }
 
     public Object executeGetSnapshot(JsonNode input) throws Exception {
-        var stageModeStr = input.path("stage").asText("focused");
+        var stageModeStr = input.path("stage").textValue() != null ? input.path("stage").textValue() : "focused";
         var stageMode = parseStageMode(stageModeStr);
         var stageIndex = input.path("stageIndex").asInt(0);
-        var mode = input.path("mode").asText("full").toLowerCase();
+        var mode = (input.path("mode").textValue() != null ? input.path("mode").textValue() : "full").toLowerCase();
         var compact = "compact".equals(mode);
 
         var defaultDepth = compact ? Math.min(config.snapshotDefaults().depth(), COMPACT_DEFAULT_DEPTH)
@@ -104,7 +104,7 @@ public class UiToolsService {
             matches = queryService.queryCss(stageIndex, css, limit);
         } else if (selectorNode.has("text")) {
             var text = selectorNode.path("text").asText();
-            var matchMode = selectorNode.path("match").asText("contains");
+            var matchMode = selectorNode.path("match").textValue() != null ? selectorNode.path("match").textValue() : "contains";
             matches = queryService.queryText(stageIndex, text, matchMode, limit);
         } else if (selectorNode.has("predicate")) {
             var predicate = mapper.treeToValue(selectorNode.path("predicate"), QueryPredicate.class);
