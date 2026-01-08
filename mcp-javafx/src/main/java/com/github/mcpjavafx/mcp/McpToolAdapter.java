@@ -65,8 +65,10 @@ public class McpToolAdapter {
     private JsonNode toArgumentsNode(Object raw) {
         var node = mapper.valueToTree(raw);
 
-        // Some transports/SDK versions may pass the full `params` object to the tool handler
-        // (e.g. { name, arguments }) instead of passing the `arguments` object directly.
+        // Some transports/SDK versions may pass the full `params` object to the tool
+        // handler
+        // (e.g. { name, arguments }) instead of passing the `arguments` object
+        // directly.
         // Support both shapes.
         var argsNode = node.get("arguments");
         if (argsNode != null && argsNode.isObject()) {
@@ -114,42 +116,42 @@ public class McpToolAdapter {
 
     private McpStatelessServerFeatures.SyncToolSpecification createQueryTool() {
         var scopeSchema = Map.<String, Object>of(
-            "type", "object",
-            "properties", Map.of(
-                "stage", Map.of("type", "string", "enum", List.of("focused", "index")),
-                "stageIndex", Map.of("type", "integer")),
-            "additionalProperties", false);
+                "type", "object",
+                "properties", Map.of(
+                        "stage", Map.of("type", "string", "enum", List.of("focused", "index")),
+                        "stageIndex", Map.of("type", "integer")),
+                "additionalProperties", false);
 
         var selectorSchema = Map.<String, Object>of(
-            "type", "object",
-            "properties", Map.of(
-                "css", Map.of("type", "string"),
-                "text", Map.of("type", "string"),
-                "match", Map.of("type", "string", "enum", List.of("contains", "equals", "regex")),
-                "predicate", Map.of("type", "object")),
-            "additionalProperties", true);
+                "type", "object",
+                "properties", Map.of(
+                        "css", Map.of("type", "string"),
+                        "text", Map.of("type", "string"),
+                        "match", Map.of("type", "string", "enum", List.of("contains", "equals", "regex")),
+                        "predicate", Map.of("type", "object")),
+                "additionalProperties", true);
 
         var inputSchema = objectSchema(
-            Map.of(
-                "scope", scopeSchema,
-                "selector", selectorSchema,
-                "limit", Map.of("type", "integer")),
-            List.of("selector"));
+                Map.of(
+                        "scope", scopeSchema,
+                        "selector", selectorSchema,
+                        "limit", Map.of("type", "integer")),
+                List.of("selector"));
 
         return new McpStatelessServerFeatures.SyncToolSpecification(
-            tool(
-                "ui_query",
-                "Find UI nodes by selector. selector.css uses Scene.lookupAll; selector.text searches visible text with match=contains|equals|regex; selector.predicate supports structured filters.",
-                inputSchema),
-            (exchange, arguments) -> {
-                try {
-                    var input = toArgumentsNode(arguments);
-                    var result = toolsService.executeQuery(input);
-                    return toStructuredResult(result);
-                } catch (Exception e) {
-                    return toStructuredResult(toolsService.wrapException(e));
-                }
-            });
+                tool(
+                        "ui_query",
+                        "Find UI nodes by selector. selector.css uses Scene.lookupAll; selector.text searches visible text with match=contains|equals|regex; selector.predicate supports structured filters.",
+                        inputSchema),
+                (exchange, arguments) -> {
+                    try {
+                        var input = toArgumentsNode(arguments);
+                        var result = toolsService.executeQuery(input);
+                        return toStructuredResult(result);
+                    } catch (Exception e) {
+                        return toStructuredResult(toolsService.wrapException(e));
+                    }
+                });
     }
 
     private McpStatelessServerFeatures.SyncToolSpecification createGetNodeTool() {
@@ -186,43 +188,58 @@ public class McpToolAdapter {
 
     private McpStatelessServerFeatures.SyncToolSpecification createPerformTool() {
         var refSchema = Map.<String, Object>of(
-            "type", "object",
-            "properties", Map.of(
-                "uid", Map.of("type", "string"),
-                "path", Map.of("type", "string")),
-            "additionalProperties", false);
+                "type", "object",
+                "properties", Map.of(
+                        "uid", Map.of("type", "string"),
+                        "path", Map.of("type", "string")),
+                "additionalProperties", false);
 
         var targetSchema = Map.<String, Object>of(
-            "type", "object",
-            "properties", Map.of(
-                "ref", refSchema),
-            "additionalProperties", false);
+                "type", "object",
+                "properties", Map.of(
+                        "ref", refSchema),
+                "additionalProperties", false);
+
+        var positionSchema = Map.<String, Object>of(
+                "type", "object",
+                "properties", Map.of(
+                        "ref", refSchema,
+                        "x", Map.of("type", "number"),
+                        "y", Map.of("type", "number")),
+                "additionalProperties", false);
+
+        var actionProperties = new java.util.HashMap<String, Object>();
+        actionProperties.put("type", Map.of("type", "string", "enum", List.of(
+                "focus", "click", "doubleClick", "typeText", "setText",
+                "pressKey", "scroll", "mousePressed", "mouseReleased", "drag")));
+        actionProperties.put("target", targetSchema);
+        actionProperties.put("text", Map.of("type", "string"));
+        actionProperties.put("key", Map.of("type", "string"));
+        actionProperties.put("modifiers", Map.of("type", "array", "items", Map.of("type", "string")));
+        actionProperties.put("button", Map.of("type", "string", "enum", List.of("PRIMARY", "SECONDARY", "MIDDLE")));
+        actionProperties.put("deltaY", Map.of("type", "number"));
+        actionProperties.put("from", positionSchema);
+        actionProperties.put("to", positionSchema);
+        actionProperties.put("x", Map.of("type", "number"));
+        actionProperties.put("y", Map.of("type", "number"));
 
         var actionSchema = Map.<String, Object>of(
-            "type", "object",
-            "properties", Map.of(
-                "type", Map.of("type", "string", "enum", List.of("focus", "click", "typeText", "setText", "pressKey", "scroll")),
-                "target", targetSchema,
-                "text", Map.of("type", "string"),
-                "key", Map.of("type", "string"),
-                "modifiers", Map.of("type", "array", "items", Map.of("type", "string")),
-                "deltaY", Map.of("type", "number"),
-                "x", Map.of("type", "number"),
-                "y", Map.of("type", "number")),
-            "required", List.of("type"),
-            "additionalProperties", true);
+                "type", "object",
+                "properties", actionProperties,
+                "required", List.of("type"),
+                "additionalProperties", true);
 
         var inputSchema = objectSchema(
-            Map.of(
-                "actions", Map.of("type", "array", "items", actionSchema),
-                "awaitUiIdle", Map.of("type", "boolean"),
-                "timeoutMs", Map.of("type", "integer")),
-            List.of("actions"));
+                Map.of(
+                        "actions", Map.of("type", "array", "items", actionSchema),
+                        "awaitUiIdle", Map.of("type", "boolean"),
+                        "timeoutMs", Map.of("type", "integer")),
+                List.of("actions"));
 
         return new McpStatelessServerFeatures.SyncToolSpecification(
                 tool(
                         "ui_perform",
-                        "Execute a sequence of UI actions.",
+                        "Execute a sequence of UI actions. Supports: click, doubleClick, focus, setText, typeText, pressKey, scroll, mousePressed, mouseReleased, drag.",
                         inputSchema),
                 (exchange, arguments) -> {
                     try {
@@ -257,13 +274,15 @@ public class McpToolAdapter {
     }
 
     private Tool tool(String name, String description, JsonSchema inputSchema) {
-        // SDK 0.17.0 Tool is a record with full metadata; keep minimal fields populated.
+        // SDK 0.17.0 Tool is a record with full metadata; keep minimal fields
+        // populated.
         return Tool.builder()
                 .name(name)
                 .title(name)
                 .description(description)
                 .inputSchema(inputSchema)
-                // Non-null outputSchema makes the SDK expect structuredContent in CallToolResult.
+                // Non-null outputSchema makes the SDK expect structuredContent in
+                // CallToolResult.
                 // We always return structuredContent ({"output":...} or {"error":...}).
                 .outputSchema(objectOutputSchema())
                 .meta(Map.of("schemaVersion", "2"))
@@ -272,8 +291,8 @@ public class McpToolAdapter {
 
     private Map<String, Object> objectOutputSchema() {
         // Intentionally permissive schema:
-        //   success: { "output": <any> }
-        //   error:   { "error": { code, message, ... } }
+        // success: { "output": <any> }
+        // error: { "error": { code, message, ... } }
         return Map.of(
                 "type", "object",
                 "properties", Map.of(

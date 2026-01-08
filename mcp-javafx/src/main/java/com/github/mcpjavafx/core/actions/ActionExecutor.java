@@ -78,7 +78,7 @@ public class ActionExecutor {
     /**
      * Clicks on a node (center).
      */
-    public ActionResult click(NodeRef ref) {
+    public ActionResult click(NodeRef ref, Double x, Double y) {
         return Fx.exec(() -> {
             var node = queryService.findByRef(ref);
             if (node == null) {
@@ -88,8 +88,9 @@ public class ActionExecutor {
             bringWindowToFront(node);
 
             // Prefer deterministic UI-level activation for common controls.
-            // This avoids flakiness when the window isn't focused or is covered by other windows.
-            if (node instanceof ButtonBase button) {
+            // This avoids flakiness when the window isn't focused or is covered by other
+            // windows. Only use if no specific coordinates are requested.
+            if (node instanceof ButtonBase button && x == null && y == null) {
                 button.fire();
                 return ActionResult.success("click");
             }
@@ -99,11 +100,17 @@ public class ActionExecutor {
                 return ActionResult.failure("click", "Cannot get screen bounds for node");
             }
 
-            double centerX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
-            double centerY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
+            double clickX, clickY;
+            if (x != null && y != null) {
+                clickX = screenBounds.getMinX() + x;
+                clickY = screenBounds.getMinY() + y;
+            } else {
+                clickX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
+                clickY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
+            }
 
             var robot = getRobot();
-            robot.mouseMove(centerX, centerY);
+            robot.mouseMove(clickX, clickY);
             robot.mouseClick(MouseButton.PRIMARY);
 
             return ActionResult.success("click");
@@ -120,6 +127,227 @@ public class ActionExecutor {
             robot.mouseClick(MouseButton.PRIMARY);
             return ActionResult.success("click");
         }, fxTimeoutMs);
+    }
+
+    /**
+     * Double-clicks on a node (center).
+     */
+    public ActionResult doubleClick(NodeRef ref, Double x, Double y) {
+        return Fx.exec(() -> {
+            var node = queryService.findByRef(ref);
+            if (node == null) {
+                return ActionResult.failure("doubleClick", "Node not found: " + ref);
+            }
+
+            bringWindowToFront(node);
+
+            var screenBounds = getScreenBounds(node);
+            if (screenBounds == null) {
+                return ActionResult.failure("doubleClick", "Cannot get screen bounds for node");
+            }
+
+            double clickX, clickY;
+            if (x != null && y != null) {
+                clickX = screenBounds.getMinX() + x;
+                clickY = screenBounds.getMinY() + y;
+            } else {
+                clickX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
+                clickY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
+            }
+
+            var robot = getRobot();
+            robot.mouseMove(clickX, clickY);
+
+            // Get system double-click interval (default 200ms if not available)
+            int doubleClickInterval = getDoubleClickInterval();
+
+            // First click
+            robot.mousePress(MouseButton.PRIMARY);
+            robot.mouseRelease(MouseButton.PRIMARY);
+
+            // Wait a small fraction of the threshold to ensure proper timing
+            try {
+                Thread.sleep(Math.max(10, doubleClickInterval / 4));
+            } catch (InterruptedException ignored) {
+            }
+
+            // Second click
+            robot.mousePress(MouseButton.PRIMARY);
+            robot.mouseRelease(MouseButton.PRIMARY);
+
+            return ActionResult.success("doubleClick");
+        }, fxTimeoutMs);
+    }
+
+    /**
+     * Presses mouse button on a node (without releasing).
+     */
+    public ActionResult mousePressed(NodeRef ref, String button, Double x, Double y) {
+        return Fx.exec(() -> {
+            var node = queryService.findByRef(ref);
+            if (node == null) {
+                return ActionResult.failure("mousePressed", "Node not found: " + ref);
+            }
+
+            bringWindowToFront(node);
+
+            var screenBounds = getScreenBounds(node);
+            if (screenBounds == null) {
+                return ActionResult.failure("mousePressed", "Cannot get screen bounds for node");
+            }
+
+            double clickX, clickY;
+            if (x != null && y != null) {
+                clickX = screenBounds.getMinX() + x;
+                clickY = screenBounds.getMinY() + y;
+            } else {
+                clickX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
+                clickY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
+            }
+
+            var robot = getRobot();
+            robot.mouseMove(clickX, clickY);
+            robot.mousePress(parseMouseButton(button));
+
+            return ActionResult.success("mousePressed");
+        }, fxTimeoutMs);
+    }
+
+    /**
+     * Releases mouse button on a node.
+     */
+    public ActionResult mouseReleased(NodeRef ref, String button, Double x, Double y) {
+        return Fx.exec(() -> {
+            if (ref != null) {
+                var node = queryService.findByRef(ref);
+                if (node == null) {
+                    return ActionResult.failure("mouseReleased", "Node not found: " + ref);
+                }
+
+                var screenBounds = getScreenBounds(node);
+                if (screenBounds != null) {
+                    double clickX, clickY;
+                    if (x != null && y != null) {
+                        clickX = screenBounds.getMinX() + x;
+                        clickY = screenBounds.getMinY() + y;
+                    } else {
+                        clickX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
+                        clickY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
+                    }
+                    getRobot().mouseMove(clickX, clickY);
+                }
+            } else if (x != null && y != null) {
+                getRobot().mouseMove(x, y);
+            }
+
+            getRobot().mouseRelease(parseMouseButton(button));
+            return ActionResult.success("mouseReleased");
+        }, fxTimeoutMs);
+    }
+
+    /**
+     * Performs a drag operation from source to target.
+     */
+    public ActionResult drag(NodeRef fromRef, Double fromX, Double fromY,
+            NodeRef toRef, Double toX, Double toY, String button) {
+        return Fx.exec(() -> {
+            var robot = getRobot();
+            var mouseButton = parseMouseButton(button);
+
+            // Determine start position
+            double startX, startY;
+            if (fromRef != null) {
+                var node = queryService.findByRef(fromRef);
+                if (node == null) {
+                    return ActionResult.failure("drag", "Source node not found: " + fromRef);
+                }
+                bringWindowToFront(node);
+                var screenBounds = getScreenBounds(node);
+                if (screenBounds == null) {
+                    return ActionResult.failure("drag", "Cannot get screen bounds for source node");
+                }
+                if (fromX != null && fromY != null) {
+                    startX = screenBounds.getMinX() + fromX;
+                    startY = screenBounds.getMinY() + fromY;
+                } else {
+                    startX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
+                    startY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
+                }
+            } else if (fromX != null && fromY != null) {
+                startX = fromX;
+                startY = fromY;
+            } else {
+                return ActionResult.failure("drag", "No source specified");
+            }
+
+            // Determine end position
+            double endX, endY;
+            if (toRef != null) {
+                var node = queryService.findByRef(toRef);
+                if (node == null) {
+                    return ActionResult.failure("drag", "Target node not found: " + toRef);
+                }
+                var screenBounds = getScreenBounds(node);
+                if (screenBounds == null) {
+                    return ActionResult.failure("drag", "Cannot get screen bounds for target node");
+                }
+                if (toX != null && toY != null) {
+                    endX = screenBounds.getMinX() + toX;
+                    endY = screenBounds.getMinY() + toY;
+                } else {
+                    endX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
+                    endY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
+                }
+            } else if (toX != null && toY != null) {
+                endX = toX;
+                endY = toY;
+            } else {
+                return ActionResult.failure("drag", "No target specified");
+            }
+
+            // Execute drag sequence
+            robot.mouseMove(startX, startY);
+            robot.mousePress(mouseButton);
+
+            // Move in steps to trigger proper drag events
+            int steps = 10;
+            for (int i = 1; i <= steps; i++) {
+                double x = startX + (endX - startX) * i / steps;
+                double y = startY + (endY - startY) * i / steps;
+                robot.mouseMove(x, y);
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException ignored) {
+                }
+            }
+
+            robot.mouseRelease(mouseButton);
+
+            return ActionResult.success("drag");
+        }, fxTimeoutMs);
+    }
+
+    private MouseButton parseMouseButton(String button) {
+        if (button == null || button.isBlank()) {
+            return MouseButton.PRIMARY;
+        }
+        return switch (button.toUpperCase()) {
+            case "SECONDARY", "RIGHT" -> MouseButton.SECONDARY;
+            case "MIDDLE" -> MouseButton.MIDDLE;
+            default -> MouseButton.PRIMARY;
+        };
+    }
+
+    private int getDoubleClickInterval() {
+        try {
+            Object interval = java.awt.Toolkit.getDefaultToolkit()
+                    .getDesktopProperty("awt.multiClickInterval");
+            if (interval instanceof Integer) {
+                return (Integer) interval;
+            }
+        } catch (Exception ignored) {
+        }
+        return 200; // Default 200ms
     }
 
     /**

@@ -125,7 +125,8 @@ public class UiToolsService {
             matches = queryService.queryCss(stageIndex, css, limit);
         } else if (selectorNode.has("text")) {
             var text = selectorNode.path("text").asText();
-            var matchMode = selectorNode.path("match").textValue() != null ? selectorNode.path("match").textValue() : "contains";
+            var matchMode = selectorNode.path("match").textValue() != null ? selectorNode.path("match").textValue()
+                    : "contains";
             matches = queryService.queryText(stageIndex, text, matchMode, limit);
         } else if (selectorNode.has("predicate")) {
             var predicate = mapper.treeToValue(selectorNode.path("predicate"), QueryPredicate.class);
@@ -177,11 +178,40 @@ public class UiToolsService {
             var type = actionNode.path("type").asText();
 
             ActionExecutor.ActionResult res = switch (type) {
-                case "click" -> actionExecutor.click(extractTargetRef(actionNode));
+                case "click" -> actionExecutor.click(
+                        extractTargetRef(actionNode),
+                        extractDouble(actionNode.path("x")),
+                        extractDouble(actionNode.path("y")));
                 case "focus" -> actionExecutor.focus(extractTargetRef(actionNode));
-                case "setText" -> actionExecutor.setText(extractTargetRef(actionNode), actionNode.path("text").asText());
+                case "setText" ->
+                    actionExecutor.setText(extractTargetRef(actionNode), actionNode.path("text").asText());
                 case "typeText" -> actionExecutor.typeText(actionNode.path("text").asText());
+                case "pressKey" -> actionExecutor.pressKey(
+                        actionNode.path("key").asText(),
+                        parseModifiers(actionNode.path("modifiers")));
                 case "scroll" -> actionExecutor.scroll(extractTargetRef(actionNode), actionNode.path("deltaY").asInt());
+                case "doubleClick" -> actionExecutor.doubleClick(
+                        extractTargetRef(actionNode),
+                        extractDouble(actionNode.path("x")),
+                        extractDouble(actionNode.path("y")));
+                case "mousePressed" -> actionExecutor.mousePressed(
+                        extractTargetRef(actionNode),
+                        actionNode.path("button").asText("PRIMARY"),
+                        extractDouble(actionNode.path("x")),
+                        extractDouble(actionNode.path("y")));
+                case "mouseReleased" -> actionExecutor.mouseReleased(
+                        extractTargetRef(actionNode),
+                        actionNode.path("button").asText("PRIMARY"),
+                        extractDouble(actionNode.path("x")),
+                        extractDouble(actionNode.path("y")));
+                case "drag" -> actionExecutor.drag(
+                        extractFromRef(actionNode),
+                        extractDouble(actionNode.path("from").path("x")),
+                        extractDouble(actionNode.path("from").path("y")),
+                        extractToRef(actionNode),
+                        extractDouble(actionNode.path("to").path("x")),
+                        extractDouble(actionNode.path("to").path("y")),
+                        actionNode.path("button").asText("PRIMARY"));
                 default -> ActionExecutor.ActionResult.failure(type, "Unknown action type: " + type);
             };
             results.add(res);
@@ -196,6 +226,29 @@ public class UiToolsService {
             return null;
         }
         return mapper.treeToValue(refNode, NodeRef.class);
+    }
+
+    private NodeRef extractFromRef(JsonNode actionNode) throws com.fasterxml.jackson.core.JsonProcessingException {
+        var refNode = actionNode.path("from").path("ref");
+        if (refNode.isMissingNode() || refNode.isNull()) {
+            return null;
+        }
+        return mapper.treeToValue(refNode, NodeRef.class);
+    }
+
+    private NodeRef extractToRef(JsonNode actionNode) throws com.fasterxml.jackson.core.JsonProcessingException {
+        var refNode = actionNode.path("to").path("ref");
+        if (refNode.isMissingNode() || refNode.isNull()) {
+            return null;
+        }
+        return mapper.treeToValue(refNode, NodeRef.class);
+    }
+
+    private Double extractDouble(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return null;
+        }
+        return node.asDouble();
     }
 
     public Object executeScreenshot(JsonNode input) throws Exception {
@@ -228,6 +281,19 @@ public class UiToolsService {
             return Set.of();
         }
         var result = new LinkedHashSet<String>();
+        for (var val : node) {
+            if (val.isTextual() && !val.asText().isBlank()) {
+                result.add(val.asText());
+            }
+        }
+        return result;
+    }
+
+    private List<String> parseModifiers(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        var result = new java.util.ArrayList<String>();
         for (var val : node) {
             if (val.isTextual() && !val.asText().isBlank()) {
                 result.add(val.asText());

@@ -99,23 +99,63 @@ You are connected to a JavaFX application via an MCP server. You can inspect the
 
 ### 4. `ui_perform`
 **Purpose**: Interact with the UI.
-*   **Actions**: `focus`, `click`, `typeText` (into focused), `setText` (direct value), `pressKey`, `scroll`.
+*   **Actions**: 
+    *   `focus` - Focus a node
+    *   `click` - Single click on a node
+    *   `doubleClick` - Double-click with proper clickCount
+    *   `typeText` - Type text into focused element
+    *   `setText` - Set text directly on TextInputControl
+    *   `pressKey` - Press a key with optional modifiers
+    *   `scroll` - Scroll on a node
+    *   `mousePressed` / `mouseReleased` - Granular mouse control
+    *   `drag` - Drag from source to target
 *   **Batching**: You can send multiple actions in one call.
 *   **Best Practice**: Always set `awaitUiIdle: true` (default) to ensure the UI has processed your interaction before you take the next snapshot.
 
-**Example:**
+**Example (Basic):**
 ```json
 {
   "tool": "ui_perform",
   "input": {
     "awaitUiIdle": true,
-    "timeoutMs": 5000,
     "actions": [
       { "type": "focus", "target": { "ref": { "uid": "u-1" } } },
       { "type": "setText", "target": { "ref": { "uid": "u-2" } }, "text": "Hello" },
       { "type": "click", "target": { "ref": { "uid": "u-3" } } }
     ]
   }
+}
+```
+
+**Example (Double-click):**
+```json
+{
+  "actions": [
+    { "type": "doubleClick", "target": { "ref": { "uid": "u-5" } } }
+  ]
+}
+```
+
+**Example (Press Key with Modifiers):**
+```json
+{
+  "actions": [
+    { "type": "pressKey", "key": "S", "modifiers": ["CONTROL"] }
+  ]
+}
+```
+
+**Example (Drag):**
+```json
+{
+  "actions": [
+    { 
+      "type": "drag", 
+      "from": { "ref": { "uid": "u-10" } },
+      "to": { "x": 500, "y": 300 },
+      "button": "PRIMARY"
+    }
+  ]
 }
 ```
 

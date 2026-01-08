@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.github.mcpjavafx.api.McpJavafxConfig;
+import com.github.mcpjavafx.mcp.McpPromptAdapter;
 import com.github.mcpjavafx.mcp.McpToolAdapter;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
@@ -56,22 +57,23 @@ public class HttpMcpServer {
         // forward-compatible capabilities fields that the current SDK schema
         // doesn't model yet (e.g. capabilities.elicitation.*).
         var objectMapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         var jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
         // Create MCP SDK Stateless Streamable HTTP transport (Servlet)
         var transport = HttpServletStatelessServerTransport.builder()
-            .jsonMapper(jsonMapper)
+                .jsonMapper(jsonMapper)
                 .messageEndpoint(MCP_ENDPOINT)
-            .build();
+                .build();
 
         // Create MCP Server with SDK
         mcpServer = McpServer.sync(transport)
                 .serverInfo("mcp-javafx-debug", "1.0.1")
                 .capabilities(ServerCapabilities.builder()
                         .tools(true)
+                        .prompts(true)
                         .logging()
                         .build())
                 .build();
@@ -79,6 +81,10 @@ public class HttpMcpServer {
         // Register tools via adapter
         var toolAdapter = new McpToolAdapter(config);
         toolAdapter.registerTools(mcpServer);
+
+        // Register prompts via adapter
+        var promptAdapter = new McpPromptAdapter();
+        promptAdapter.registerPrompts(mcpServer);
 
         // Create Jetty server
         jettyServer = new Server();
