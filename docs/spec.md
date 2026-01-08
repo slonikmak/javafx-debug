@@ -70,7 +70,8 @@ public record SnapshotOptions(
   boolean includeLocalToScreen,
   boolean includeProperties,
   boolean includeVirtualization,
-  boolean includeAccessibility
+  boolean includeAccessibility,
+  boolean includeControlInternals // Default false
 ) {}
 ```
 
@@ -82,7 +83,7 @@ public record SnapshotOptions(
 * `mcp.port` (`0` default)
 * `mcp.token` (optional)
 * `mcp.allowActions` (`true/false`)
-* `mcp.snapshot.depth`, `mcp.snapshot.bounds`, …
+* `mcp.snapshot.depth`, `mcp.snapshot.bounds`, `mcp.snapshot.internals`…
 
 ---
 
@@ -165,6 +166,10 @@ Use schema from contract with version:
 * Key in `node.getProperties()` = `"mcp.uid"`
 * Format: `u-<base36 counter>` or UUID (counter preferred for readability)
 
+**Snapshot Structure**:
+* `content`: Text-based tree representation (optimized for LLM).
+* `structuredContent`: JSON object structure (for tools).
+
 ---
 
 ## 7) Tree Collection (Snapshotter)
@@ -189,6 +194,7 @@ Simple method:
 * Start: `stage.getScene().getRoot()`
 * DFS traversal up to `depth`
 * Children: If node `instanceof Parent` → `getChildrenUnmodifiable()`
+* **Control Internals**: By default, standard controls (Button, TextField, etc.) are treated as leaves. Recursion into their skin implementation is skipped unless `includeControlInternals=true`.
 
 **Determinism**: Children order strictly as returned by JavaFX.
 
@@ -292,8 +298,12 @@ Limitations:
 ### 11.1 Tools (Mandatory)
 
 * `ui_get_snapshot`
+  * Supports `mode` (full/compact)
+  * Supports `includeControlInternals`
+  * Returns `content` (text) and `structuredContent` (JSON)
 * `ui_query`
 * `ui_get_node`
+  * Supports `fields` and `properties` filtering
 * `ui_perform`
 * `ui_screenshot`
 

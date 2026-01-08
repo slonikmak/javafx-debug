@@ -10,6 +10,8 @@ package com.github.mcpjavafx.api;
  * @param includeVirtualization include virtualization info for list/table
  *                              controls
  * @param includeAccessibility  include accessibility info
+ * @param skeleton              capture only structure without details
+ * @param includeControlInternals include internal children of standard controls
  */
 public record SnapshotOptions(
         int depth,
@@ -17,14 +19,18 @@ public record SnapshotOptions(
         boolean includeLocalToScreen,
         boolean includeProperties,
         boolean includeVirtualization,
-        boolean includeAccessibility) {
+        boolean includeAccessibility,
+        boolean skeleton,
+        boolean includeControlInternals) {
     public static final SnapshotOptions DEFAULT = new SnapshotOptions(
             50, // depth
             true, // includeBounds
             true, // includeLocalToScreen
             false, // includeProperties
             true, // includeVirtualization
-            false // includeAccessibility
+            false, // includeAccessibility
+            false, // skeleton
+            false // includeControlInternals
     );
 
     public static Builder builder() {
@@ -38,6 +44,8 @@ public record SnapshotOptions(
         private boolean includeProperties = false;
         private boolean includeVirtualization = true;
         private boolean includeAccessibility = false;
+        private boolean skeleton = false;
+        private boolean includeControlInternals = false;
 
         public Builder depth(int depth) {
             this.depth = depth;
@@ -69,10 +77,20 @@ public record SnapshotOptions(
             return this;
         }
 
+        public Builder skeleton(boolean skeleton) {
+            this.skeleton = skeleton;
+            return this;
+        }
+
+        public Builder includeControlInternals(boolean includeControlInternals) {
+            this.includeControlInternals = includeControlInternals;
+            return this;
+        }
+
         public SnapshotOptions build() {
             return new SnapshotOptions(
                     depth, includeBounds, includeLocalToScreen,
-                    includeProperties, includeVirtualization, includeAccessibility);
+                    includeProperties, includeVirtualization, includeAccessibility, skeleton, includeControlInternals);
         }
     }
 }

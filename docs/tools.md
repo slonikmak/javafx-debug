@@ -20,8 +20,16 @@ You are connected to a JavaFX application via an MCP server. You can inspect the
 
 ### 1. `ui_get_snapshot`
 **Purpose**: Get the current state of the UI tree.
-*   **Key Inputs**: `stage` (focused/primary/all), `mode` (full/compact), `depth`, `include` (bounds, properties, etc.).
-*   **Best Practice**: Prefer `mode: "compact"` first; only request full bounds/properties when needed.
+*   **Key Inputs**:
+    *   `stage`: `focused` (default), `primary`, or `all`.
+    *   `mode`: `compact` (default) or `full`.
+    *   `depth`: Max traversal depth.
+    *   `includeControlInternals`: `false` (default) to hide internal nodes of standard controls (e.g. `Button` skin), `true` to show everything.
+    *   `include`: Object to toggle specific fields (`bounds`, `properties`, `localToScreen`, etc.).
+*   **Output**:
+    *   `content`: A concise **Text Tree** representation of the UI (optimized for LLM reading).
+    *   `structuredContent`: A JSON object mirroring the tree structure (for programmatic use).
+*   **Best Practice**: Rely on the text `content` for understanding the UI structure. It is token-efficient. Only request `includeControlInternals: true` if you are debugging custom control skins.
 
 **Example Request:**
 ```json
@@ -30,10 +38,9 @@ You are connected to a JavaFX application via an MCP server. You can inspect the
   "input": {
     "stage": "focused",
     "mode": "compact",
-    "depth": 50,
+    "includeControlInternals": false,
     "include": {
-      "bounds": true,
-      "localToScreen": true
+      "bounds": true
     }
   }
 }
@@ -71,8 +78,24 @@ You are connected to a JavaFX application via an MCP server. You can inspect the
 ```
 
 ### 3. `ui_get_node`
-**Purpose**: Get full details for a single node.
-*   **Best Practice**: Use this when you have a `uid` from a previous snapshot and need deeper info (like all FX properties) that wasn't included in the summary snapshot.
+**Purpose**: Get details for a single node.
+*   **Key Inputs**:
+    *   `ref`: The node reference (`uid` or `path`).
+    *   `fields`: List of specific fields to retrieve (e.g., `["bounds", "properties"]`).
+    *   `properties`: List of specific JavaFX properties to retrieve (e.g., `["text", "visible"]`).
+*   **Best Practice**: Use this when you have a `uid` from a snapshot and need specific details. Use `fields` and `properties` to keep the response small.
+
+**Example:**
+```json
+{
+  "tool": "ui_get_node",
+  "input": {
+    "ref": { "uid": "u-123" },
+    "fields": ["bounds", "properties"],
+    "properties": ["text", "disabled"]
+  }
+}
+```
 
 ### 4. `ui_perform`
 **Purpose**: Interact with the UI.
@@ -124,7 +147,7 @@ You are connected to a JavaFX application via an MCP server. You can inspect the
 
 ### Debugging a missing element
 If an element is missing from a `ui.getSnapshot` result:
-1.  Check if `depth` was too low.
+1.  Check if `includeControlInternals` is `false` (default) and the element is inside a standard control.
 2.  Call `ui_get_snapshot` with `stage: "all"` to see if it's in a different popup/window.
 3.  Check visibility/opacity properties of parents.
 

@@ -80,7 +80,8 @@ If you are sending MCP messages manually, follow the MCP lifecycle:
     "name": "ui_get_snapshot",
     "arguments": {
       "stage": "focused",
-      "depth": 50,
+      "mode": "compact",
+      "includeControlInternals": false,
       "include": {
         "bounds": true,
         "localToScreen": true
@@ -101,6 +102,7 @@ If you are sending MCP messages manually, follow the MCP lifecycle:
 | `mcp.token` | (generated) | Auth token (HTTP only) |
 | `mcp.allowActions` | `true` | Allow UI actions |
 | `mcp.auth` | `true` | Require `Authorization: Bearer` for `/mcp` |
+| `mcp.snapshot.internals` | `false` | Default for `includeControlInternals` |
 
 ## Requirements
 

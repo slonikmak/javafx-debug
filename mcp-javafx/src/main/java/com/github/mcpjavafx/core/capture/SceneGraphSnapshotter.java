@@ -72,6 +72,7 @@ public class SceneGraphSnapshotter {
                     .includeProperties(options.includeProperties())
                     .includeVirtualization(options.includeVirtualization())
                     .includeAccessibility(options.includeAccessibility())
+                    .includeControlInternals(options.includeControlInternals())
                     .build();
 
             return captureNode(node, stageIndex, effectiveOptions, 0);
@@ -188,14 +189,20 @@ public class SceneGraphSnapshotter {
     }
 
     private UiNode captureNode(Node node, int stageIndex, SnapshotOptions options, int depth) {
+        if (options.skeleton()) {
+            return captureSkeletonNode(node, stageIndex, options, depth);
+        }
+
         var ref = nodeRefService.forNode(node, stageIndex);
 
         // Children
         List<UiNode> children = List.of();
         if (depth < options.depth() && node instanceof Parent parent) {
-            children = parent.getChildrenUnmodifiable().stream()
-                    .map(child -> captureNode(child, stageIndex, options, depth + 1))
-                    .toList();
+            if (shouldRecurse(node, options)) {
+                children = parent.getChildrenUnmodifiable().stream()
+                        .map(child -> captureNode(child, stageIndex, options, depth + 1))
+                        .toList();
+            }
         }
 
         return new UiNode(
@@ -215,6 +222,59 @@ public class SceneGraphSnapshotter {
                 options.includeAccessibility() ? captureAccessibility(node) : null,
                 options.includeProperties() ? captureFxProperties(node) : null,
                 options.includeVirtualization() ? captureVirtualization(node) : null,
+                children);
+    }
+
+    private boolean shouldRecurse(Node node, SnapshotOptions options) {
+        if (options.includeControlInternals()) {
+            return true;
+        }
+        // Black box controls - treat as leaves unless explicitly requested
+        if (node instanceof TextInputControl ||
+            node instanceof Labeled ||
+            node instanceof Slider ||
+            node instanceof ProgressBar ||
+            node instanceof ProgressIndicator ||
+            node instanceof ScrollBar ||
+            node instanceof Separator ||
+            node instanceof ComboBox ||
+            node instanceof ChoiceBox ||
+            node instanceof Spinner ||
+            node instanceof ColorPicker ||
+            node instanceof DatePicker) {
+            return false;
+        }
+        return true;
+    }
+
+    private UiNode captureSkeletonNode(Node node, int stageIndex, SnapshotOptions options, int depth) {
+        var ref = nodeRefService.forNode(node, stageIndex);
+        List<UiNode> children = List.of();
+        if (depth < options.depth() && node instanceof Parent parent) {
+            if (shouldRecurse(node, options)) {
+                children = parent.getChildrenUnmodifiable().stream()
+                        .map(child -> captureSkeletonNode(child, stageIndex, options, depth + 1))
+                        .toList();
+            }
+        }
+
+        return new UiNode(
+                ref,
+                node.getClass().getSimpleName(),
+                null,
+                node.getId(),
+                null,
+                null,
+                false,
+                false,
+                false,
+                1.0,
+                null,
+                captureTextInfo(node),
+                captureValueInfo(node),
+                null,
+                null,
+                null,
                 children);
     }
 

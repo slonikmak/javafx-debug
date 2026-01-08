@@ -10,6 +10,7 @@ Below is the compact but complete spec for the "MCP ⇄ JavaFX Introspection/Con
 2. **Security**: Server accessible locally by default; introspection and control under debug flag.
 3. **FX-thread correctness**: All UI reads/writes execute on **JavaFX Application Thread**.
 4. **Reproducibility**: Snapshot must be returned in deterministic order.
+5. **Efficiency**: Snapshots must be token-efficient for LLM consumption.
 
 ---
 
@@ -73,22 +74,25 @@ Support minimum 2 modes:
     "focusedNode": { "path": "...", "uid": "..." },
     "focusedWindow": { "stageIndex": 0 }
   },
-  "stages": [
-    {
-      "stageIndex": 0,
-      "title": "Main",
-      "showing": true,
-      "focused": true,
-      "x": 100.0,
-      "y": 50.0,
-      "width": 1200.0,
-      "height": 800.0,
-      "scene": {
-        "stylesheets": ["app.css"],
-        "root": { "...UiNode..." }
+  "content": "Stage: Main (focused)\n  VBox (u-1)\n    Label \"Hello\" (u-2)\n    Button \"Click Me\" (u-3)",
+  "structuredContent": {
+    "stages": [
+      {
+        "stageIndex": 0,
+        "title": "Main",
+        "showing": true,
+        "focused": true,
+        "x": 100.0,
+        "y": 50.0,
+        "width": 1200.0,
+        "height": 800.0,
+        "scene": {
+          "stylesheets": ["app.css"],
+          "root": { "...UiNode..." }
+        }
       }
-    }
-  ]
+    ]
+  }
 }
 ```
 
@@ -137,18 +141,15 @@ Support minimum 2 modes:
 ### 2.3 Serialization Norms/Rules
 
 * `children`:
-
   * Only for `Parent` and `Skin`-visible nodes **at your choice** (see virtualization below).
+  * **Standard Controls**: By default, internal children of standard controls (e.g. `Button` skin) are **hidden** (treated as leaves).
   * Order: **As in `getChildrenUnmodifiable()`**, no sorting.
 * `pseudoClass`: Cannot get enum of known pseudo-classes directly; acceptable:
-
   * Store only what you calculate/know (e.g. `focused`, `hover`, `pressed`, `selected`, `disabled`) via node/control API;
   * Or leave empty.
 * `localToScreen`:
-
   * Optional, but very useful for coordinate clicks.
 * `module`:
-
   * `node.getClass().getModule().getName()` if available.
 
 ---
@@ -212,6 +213,7 @@ but MCP server in this library exports names in `snake_case`:
   "stageIndex": 0,
   "mode": "full|compact",
   "depth": 50,
+  "includeControlInternals": false,
   "include": {
     "bounds": true,
     "localToScreen": true,
@@ -229,9 +231,13 @@ but MCP server in this library exports names in `snake_case`:
 
 `include.*` and `depth` (if passed) override mode defaults.
 
+**Meaning of `includeControlInternals`:**
+* `false` (default) — Standard controls (Button, TextField, etc.) are treated as leaves; their internal skin nodes are hidden.
+* `true` — Full scene graph including all internal implementation nodes.
+
 **Output**
 
-* `UiSnapshot`
+* `UiSnapshot` (with `content` text tree and `structuredContent` JSON)
 
 **Errors**
 
@@ -293,12 +299,17 @@ Get details for a node.
 **Input**
 
 ```json
-{ "ref": { "path": "...", "uid": "..." }, "includeChildren": false }
+{
+  "ref": { "path": "...", "uid": "..." },
+  "includeChildren": false,
+  "fields": ["bounds", "properties"],
+  "properties": ["text", "visible"]
+}
 ```
 
 **Output**
 
-* `UiNode`
+* `UiNode` (filtered by requested fields)
 
 **Errors**
 

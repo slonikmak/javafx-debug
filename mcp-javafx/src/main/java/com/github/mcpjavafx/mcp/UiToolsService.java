@@ -6,6 +6,7 @@ import com.github.mcpjavafx.api.McpJavafxConfig;
 import com.github.mcpjavafx.api.SnapshotOptions;
 import com.github.mcpjavafx.core.actions.ActionExecutor;
 import com.github.mcpjavafx.core.capture.SceneGraphSnapshotter;
+import com.github.mcpjavafx.core.capture.TreeFormatter;
 import com.github.mcpjavafx.core.fx.FxTimeoutException;
 import com.github.mcpjavafx.core.model.ErrorCode;
 import com.github.mcpjavafx.core.model.McpError;
@@ -14,8 +15,10 @@ import com.github.mcpjavafx.core.query.NodeQueryService;
 import com.github.mcpjavafx.core.query.QueryPredicate;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,12 +29,14 @@ public class UiToolsService {
 
     private static final Logger LOG = Logger.getLogger(UiToolsService.class.getName());
     private static final int COMPACT_DEFAULT_DEPTH = 8;
+    private static final Set<String> SNAPSHOT_NODE_FIELDS = Set.of("ref", "type", "id", "text", "value", "children");
 
     private final McpJavafxConfig config;
     private final ObjectMapper mapper;
     private final SceneGraphSnapshotter snapshotter;
     private final NodeQueryService queryService;
     private final ActionExecutor actionExecutor;
+    private final TreeFormatter treeFormatter;
 
     public UiToolsService(McpJavafxConfig config, ObjectMapper mapper) {
         this.config = config;
@@ -39,14 +44,15 @@ public class UiToolsService {
         this.snapshotter = new SceneGraphSnapshotter(config.fxTimeoutMs());
         this.queryService = new NodeQueryService(config.fxTimeoutMs());
         this.actionExecutor = new ActionExecutor(config.fxTimeoutMs(), queryService);
+        this.treeFormatter = new TreeFormatter();
     }
 
     public Object executeGetSnapshot(JsonNode input) throws Exception {
         var stageModeStr = input.path("stage").textValue() != null ? input.path("stage").textValue() : "focused";
         var stageMode = parseStageMode(stageModeStr);
         var stageIndex = input.path("stageIndex").asInt(0);
-        var mode = (input.path("mode").textValue() != null ? input.path("mode").textValue() : "full").toLowerCase();
-        var compact = "compact".equals(mode);
+        var mode = (input.path("mode").textValue() != null ? input.path("mode").textValue() : "compact").toLowerCase();
+        var compact = !"full".equals(mode);
 
         var defaultDepth = compact ? Math.min(config.snapshotDefaults().depth(), COMPACT_DEFAULT_DEPTH)
                 : config.snapshotDefaults().depth();
@@ -68,6 +74,16 @@ public class UiToolsService {
         var includeAccessibility = includeNode.has("accessibility")
                 ? includeNode.path("accessibility").asBoolean()
                 : (compact ? false : config.snapshotDefaults().includeAccessibility());
+        var includeControlInternals = includeNode.has("controlInternals")
+                ? includeNode.path("controlInternals").asBoolean()
+                : (compact ? false : false);
+
+        var skeleton = compact
+                && !includeBounds
+                && !includeLocalToScreen
+                && !includeProperties
+                && !includeVirtualization
+                && !includeAccessibility;
 
         var options = SnapshotOptions.builder()
                 .depth(depth)
@@ -76,6 +92,8 @@ public class UiToolsService {
                 .includeProperties(includeProperties)
                 .includeVirtualization(includeVirtualization)
                 .includeAccessibility(includeAccessibility)
+                .includeControlInternals(includeControlInternals)
+                .skeleton(skeleton)
                 .build();
 
         var snapshot = snapshotter.capture(stageMode, stageIndex, options);
@@ -84,7 +102,10 @@ public class UiToolsService {
             return McpError.of(ErrorCode.MCP_UI_NO_STAGES, "No stages found");
         }
 
-        return snapshot;
+        var lightweight = TreeFormatter.lightweightFrom(snapshot);
+        var tree = treeFormatter.format(lightweight);
+        var structured = NodeFieldFilter.filterSnapshot(mapper, lightweight, SNAPSHOT_NODE_FIELDS);
+        return new SnapshotResult(tree, structured);
     }
 
     public Object executeQuery(JsonNode input) throws Exception {
@@ -126,6 +147,8 @@ public class UiToolsService {
         }
 
         var includeChildren = input.path("includeChildren").asBoolean(false);
+        var fields = parseStringSet(input.path("fields"));
+        var properties = parseStringSet(input.path("properties"));
 
         var options = SnapshotOptions.builder()
                 .includeBounds(config.snapshotDefaults().includeBounds())
@@ -135,7 +158,8 @@ public class UiToolsService {
                 .includeAccessibility(config.snapshotDefaults().includeAccessibility())
                 .build();
 
-        return snapshotter.captureNodeDetails(node, includeChildren, options);
+        var captured = snapshotter.captureNodeDetails(node, includeChildren, options);
+        return NodeFieldFilter.filterNode(mapper, captured, fields, properties);
     }
 
     public Object executePerform(JsonNode input) throws Exception {
@@ -197,5 +221,18 @@ public class UiToolsService {
             case "all" -> SceneGraphSnapshotter.StageMode.ALL;
             default -> SceneGraphSnapshotter.StageMode.FOCUSED;
         };
+    }
+
+    private Set<String> parseStringSet(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return Set.of();
+        }
+        var result = new LinkedHashSet<String>();
+        for (var val : node) {
+            if (val.isTextual() && !val.asText().isBlank()) {
+                result.add(val.asText());
+            }
+        }
+        return result;
     }
 }

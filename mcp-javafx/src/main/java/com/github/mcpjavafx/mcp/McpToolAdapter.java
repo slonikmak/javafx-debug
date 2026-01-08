@@ -6,23 +6,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.github.mcpjavafx.api.McpJavafxConfig;
-import com.github.mcpjavafx.api.SnapshotOptions;
-import com.github.mcpjavafx.core.actions.ActionExecutor;
-import com.github.mcpjavafx.core.capture.SceneGraphSnapshotter;
-import com.github.mcpjavafx.core.fx.Fx;
-import com.github.mcpjavafx.core.model.*;
-import com.github.mcpjavafx.core.query.NodeQueryService;
-import com.github.mcpjavafx.core.query.QueryPredicate;
+import com.github.mcpjavafx.core.model.McpError;
 import io.modelcontextprotocol.server.McpStatelessServerFeatures;
 import io.modelcontextprotocol.server.McpStatelessSyncServer;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
-import io.modelcontextprotocol.spec.McpSchema.Content;
+import io.modelcontextprotocol.spec.McpSchema.JsonSchema;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.modelcontextprotocol.spec.McpSchema.Tool;
-import io.modelcontextprotocol.spec.McpSchema.JsonSchema;
 
-import java.util.*;
-import java.util.logging.Level;
+import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
 
 /**
@@ -170,7 +163,9 @@ public class McpToolAdapter {
         var inputSchema = objectSchema(
                 Map.of(
                         "ref", refSchema,
-                        "includeChildren", Map.of("type", "boolean")),
+                        "includeChildren", Map.of("type", "boolean"),
+                        "fields", Map.of("type", "array", "items", Map.of("type", "string")),
+                        "properties", Map.of("type", "array", "items", Map.of("type", "string"))),
                 List.of("ref"));
 
         return new McpStatelessServerFeatures.SyncToolSpecification(
@@ -293,6 +288,14 @@ public class McpToolAdapter {
                     List.of(new TextContent(error.message() + " (" + error.code() + ")")),
                     true,
                     Map.of("error", error),
+                    null);
+        }
+
+        if (result instanceof SnapshotResult snapshot) {
+            return new CallToolResult(
+                    List.of(new TextContent(snapshot.tree())),
+                    false,
+                    Map.of("output", snapshot.structured()),
                     null);
         }
 
