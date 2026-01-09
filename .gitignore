@@ -53,3 +53,7 @@ buildNumber.properties
 # HTTP Client
 .idea/httpRequests/
 http-client.private.env.json
+
+# Codex / Agent
+.codex/
+.agent/
