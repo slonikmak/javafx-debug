@@ -10,7 +10,7 @@ For detailed documentation, see:
 
 ### 1. Download Agent
 
-1. Download `mcp-javafx-1.0.0-agent.jar` from [Releases](https://github.com/mcp-javafx/mcp-javafx-debug/releases).
+1. Download `mcp-javafx-1.0.0-agent.jar` from [Releases](https://github.com/slonikmak/javafx-debug/releases).
 2. Place it in your project directory (e.g., `libs/mcp-javafx-agent.jar`).
 
 ### 2. Run Application
