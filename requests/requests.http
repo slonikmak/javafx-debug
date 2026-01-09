@@ -1,0 +1,299 @@
+
+@port={{port}}
+### Health Check (Hardcoded for first test)
+GET http://127.0.0.1:55667/health
+Accept: application/json
+
+### UI E2E Test Variables
+# Used by the scripted test below.
+@testName = Antigravity Agent
+
+### Health Check (Using Variables)
+# Note: In IntelliJ, select 'dev' environment or use @port syntax
+GET http://127.0.0.1:{{port}}/health
+Accept: application/json
+
+### MCP Initialize (required by MCP lifecycle)
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {
+      "roots": { "listChanged": true },
+      "sampling": {}
+    },
+    "clientInfo": {
+      "name": "requests.http",
+      "version": "0.0"
+    }
+  }
+}
+
+### MCP Initialize (No Auth)
+# Use when mcp.auth=false
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2025-03-26",
+    "capabilities": {
+      "roots": { "listChanged": true },
+      "sampling": {}
+    },
+    "clientInfo": {
+      "name": "requests.http",
+      "version": "0.0"
+    }
+  }
+}
+
+### MCP Initialized notification
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{ "jsonrpc": "2.0", "method": "notifications/initialized" }
+
+### MCP Tools List
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{ "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {} }
+
+### UI Snapshot
+# Capture the scene graph (prefer mode=compact for LLM agents)
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 10,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_get_snapshot",
+    "arguments": {
+      "stage": "focused",
+      "mode": "full",
+      "depth": 50,
+      "include": {
+        "bounds": true,
+        "localToScreen": true,
+        "properties": true,
+        "virtualization": true,
+        "accessibility": true
+      }
+    }
+  }
+}
+
+### UI Snapshot (Compact)
+# Smaller payload: shallow depth and no bounds/properties by default
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 16,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_get_snapshot",
+    "arguments": {
+      "stage": "focused",
+      "mode": "compact"
+    }
+  }
+}
+
+### Query Nodes (CSS)
+# Find nodes by CSS selector
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 11,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_query",
+    "arguments": {
+      "selector": {
+        "css": ".button"
+      },
+      "limit": 10
+    }
+  }
+}
+
+### Query Nodes (Text)
+# Find nodes by text content
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 12,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_query",
+    "arguments": {
+      "selector": {
+        "text": "Submit",
+        "match": "contains"
+      }
+    }
+  }
+}
+
+### Get Node Details
+# Get full info for a specific node by its UID
+# Replace target.ref.uid with a real UID from getSnapshot
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 13,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_get_node",
+    "arguments": {
+      "ref": {
+        "uid": "u-1"
+      },
+      "includeChildren": true
+    }
+  }
+}
+
+### Perform Actions
+# Focus, set text, and click a button
+# Update UIDs based on getSnapshot output
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 14,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_perform",
+    "arguments": {
+      "awaitUiIdle": true,
+      "actions": [
+        {
+          "type": "focus",
+          "target": { "ref": { "uid": "u-input-1" } }
+        },
+        {
+          "type": "setText",
+          "target": { "ref": { "uid": "u-input-1" } },
+          "text": "Antigravity Agent"
+        },
+        {
+          "type": "click",
+          "target": { "ref": { "uid": "u-button-1" } }
+        }
+      ]
+    }
+  }
+}
+
+### UI E2E Smoke Test (Auto-discover refs)
+# 1) Finds #input and #submitBtn via ui_query
+# 2) Types {{testName}} into the input
+# 3) Clicks Submit
+# 4) Verifies #greeting label becomes "Hello, {{testName}}!"
+
+### [E2E] Find input field (#input)
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 201,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_query",
+    "arguments": {
+      "selector": { "css": "#input" },
+      "limit": 1
+    }
+  }
+}
+
+> {%
+  client.test("E2E: found #input", function () {
+    client.assert(response.status === 200, "HTTP status must be 200");
+    client.assert(!response.body.result.isError, "tool must not return error");
+
+    const matches = response.body.result.structuredContent.output.matches;
+    client.assert(matches && matches.length > 0, "#input not found");
+    client.global.set("e2eInputPath", matches[0].ref.path);
+  });
+%}
+
+### [E2E] Find submit button (#submitBtn)
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 202,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_query",
+    "arguments": {
+      "selector": { "css": "#submitBtn" },
+      "limit": 1
+    }
+  }
+}
+
+> {%
+  client.test("E2E: found #submitBtn", function () {
+    client.assert(response.status === 200, "HTTP status must be 200");
+    client.assert(!response.body.result.isError, "tool must not return error");
+
+    const matches = response.body.result.structuredContent.output.matches;
+    client.assert(matches && matches.length > 0, "#submitBtn not found");
+    client.global.set("e2eSubmitPath", matches[0].ref.path);
+  });
+%}
+
+### Screenshot
+# Take a screenshot of the focused stage
+POST http://127.0.0.1:{{port}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{
+  "jsonrpc": "2.0",
+  "id": 15,
+  "method": "tools/call",
+  "params": {
+    "name": "ui_screenshot",
+    "arguments": {
+      "stageIndex": -1
+    }
+  }
+}
