@@ -8,74 +8,41 @@ For detailed documentation, see:
 
 ## Quick Start
 
-### Option A: Download JAR (Recommended)
+### 1. Download Agent
 
-1. Download `mcp-javafx-X.X.X.jar` from [Releases](https://github.com/mcp-javafx/mcp-javafx-debug/releases)
-2. Place it in your project (e.g., `libs/mcp-javafx.jar`)
-3. Run your application with the agent:
+1. Download `mcp-javafx-X.X.X.jar` from [Releases](https://github.com/mcp-javafx/mcp-javafx-debug/releases).
+2. Place it in your project directory (e.g., `libs/mcp-javafx.jar`).
+
+### 2. Run Application
+
+You can run your application with the agent using either the command line or Maven.
+
+#### Method A: Command Line
 
 ```bash
 java -Dmcp.ui=true -Dmcp.port=55667 -javaagent:libs/mcp-javafx.jar -jar your-app.jar
 ```
 
-Or with `javafx-maven-plugin`:
+#### Method B: Maven Profile (Recommended)
 
-```xml
-<plugin>
-    <groupId>org.openjfx</groupId>
-    <artifactId>javafx-maven-plugin</artifactId>
-    <configuration>
-        <options>
-            <option>-Dmcp.ui=true</option>
-            <option>-Dmcp.port=55667</option>
-            <option>-javaagent:libs/mcp-javafx.jar</option>
-        </options>
-    </configuration>
-</plugin>
-```
+Using a profile is convenient for repeated runs and ensures missing dependencies are included.
 
-```bash
-mvn javafx:run
-```
-
-### Option B: Maven Dependency
-
-Add dependency to `pom.xml`:
-
-```xml
-<dependency>
-    <groupId>com.github.mcpjavafx</groupId>
-    <artifactId>mcp-javafx</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
-</dependency>
-```
-
-Add Maven profile for auto-resolving JAR path:
+1. Add the following profile to your `pom.xml`:
 
 ```xml
 <profiles>
     <profile>
-        <id>agent</id>
-        <!-- Required for screenshots if not already in your project -->
+        <id>mcp</id>
         <dependencies>
+            <!-- Required for screenshots (ui_screenshot tool) -->
             <dependency>
                 <groupId>org.openjfx</groupId>
                 <artifactId>javafx-swing</artifactId>
-                <version>${javafx.version}</version>
+                <version>${javafx.version}</version> <!-- Or specify explicit version like 21.0.1 -->
             </dependency>
         </dependencies>
         <build>
             <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-dependency-plugin</artifactId>
-                    <version>3.6.1</version>
-                    <executions>
-                        <execution>
-                            <goals><goal>properties</goal></goals>
-                        </execution>
-                    </executions>
-                </plugin>
                 <plugin>
                     <groupId>org.openjfx</groupId>
                     <artifactId>javafx-maven-plugin</artifactId>
@@ -83,7 +50,8 @@ Add Maven profile for auto-resolving JAR path:
                         <options>
                             <option>-Dmcp.ui=true</option>
                             <option>-Dmcp.port=55667</option>
-                            <option>"-javaagent:${com.github.mcpjavafx:mcp-javafx:jar}"</option>
+                            <!-- Point to your local jar path -->
+                            <option>-javaagent:libs/mcp-javafx.jar</option>
                         </options>
                     </configuration>
                 </plugin>
@@ -93,11 +61,18 @@ Add Maven profile for auto-resolving JAR path:
 </profiles>
 ```
 
-> **Note:** `javafx-swing` is required for the `ui_screenshot` tool. If your project doesn't have it, add it to the profile as shown above.
+2. Run with the profile:
 
-Run:
 ```bash
-mvn initialize javafx:run -P agent
+mvn javafx:run -P mcp
+```
+
+## Running the Demo
+
+To run the included demo application:
+
+```bash
+mvn -pl mcp-javafx-demo initialize -P agent javafx:run
 ```
 
 ## Connect to LLM
