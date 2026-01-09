@@ -15,6 +15,8 @@ import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ListView;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.AfterAll;
@@ -24,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.testfx.framework.junit5.ApplicationTest;
+import org.testfx.util.WaitForAsyncUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -79,14 +82,42 @@ class McpClientStreamableHttpE2eTest extends ApplicationTest {
 
         var button = new Button("Submit");
         button.setId("submitBtn");
+        button.setDefaultButton(true);
         button.setOnAction(e -> label.setText("Hello, " + textField.getText() + "!"));
 
-        var root = new VBox(10, label, textField, button);
+        var statusLabel = new Label("Status: Idle");
+        statusLabel.setId("statusLabel");
+
+        var mouseArea = new Pane();
+        mouseArea.setId("mouseArea");
+        mouseArea.setPrefSize(100, 100);
+        mouseArea.setStyle("-fx-background-color: lightgray;");
+        mouseArea.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                statusLabel.setText("Status: DoubleClicked");
+            }
+        });
+        mouseArea.setOnMousePressed(e -> statusLabel.setText("Status: Pressed"));
+        mouseArea.setOnMouseReleased(e -> {
+            if (!"Status: Dragged".equals(statusLabel.getText())) {
+                statusLabel.setText("Status: Released");
+            }
+        });
+        mouseArea.setOnMouseDragged(e -> statusLabel.setText("Status: Dragged"));
+
+        var listView = new ListView<String>();
+        listView.setId("listView");
+        for (int i = 1; i <= 20; i++) {
+            listView.getItems().add("Item " + i);
+        }
+        listView.setPrefHeight(100);
+
+        var root = new VBox(10, label, textField, button, statusLabel, mouseArea, listView);
         root.setId("root");
         root.setPadding(new Insets(16));
 
         stage.setTitle("TestFX MCP Demo");
-        stage.setScene(new Scene(root, 320, 200));
+        stage.setScene(new Scene(root, 320, 600));
         stage.show();
     }
 
@@ -166,8 +197,120 @@ class McpClientStreamableHttpE2eTest extends ApplicationTest {
                         Map.of("type", "typeText", "text", "Typed"))))));
 
         var inputAfterType = querySingle(Map.of("css", "#input"));
-        // summary uses buildSummary which includes type and id, but for TextField it includes [text=...]
+        // summary uses buildSummary which includes type and id, but for TextField it
+        // includes [text=...]
         assertTrue(inputAfterType.get("summary").toString().contains("text=Typed"), "Input should contain typed text");
+    }
+
+    @Test
+    void testUiScreenshot() {
+        var result = structuredOutput(client.callTool(new CallToolRequest("ui_screenshot", Map.of())));
+        assertEquals("image/png", result.get("contentType"));
+        var base64 = (String) result.get("dataBase64");
+        assertNotNull(base64);
+        assertFalse(base64.isEmpty());
+    }
+
+    @Test
+    void testUiQueryFilters() {
+        // Query by text
+        var submitMatches = (List<?>) structuredOutput(client.callTool(new CallToolRequest(
+                "ui_query", Map.of("selector", Map.of("text", "Submit", "match", "equals"))))).get("matches");
+        assertFalse(submitMatches.isEmpty(), "Should find at least 1 match for 'Submit'");
+
+        // Query by predicate (visible & enabled)
+        var predicateMatches = (List<?>) structuredOutput(client.callTool(new CallToolRequest(
+                "ui_query",
+                Map.of("selector",
+                        Map.of("predicate", Map.of("visible", true, "enabled", true, "idEquals", "submitBtn"))))))
+                .get("matches");
+        assertEquals(1, predicateMatches.size());
+    }
+
+    @Test
+    void testUiGestures() {
+        var mouseArea = querySingle(Map.of("css", "#mouseArea"));
+        var mouseAreaRef = mouseArea.get("ref");
+
+        var listView = querySingle(Map.of("css", "#listView"));
+        var listViewRef = listView.get("ref");
+
+        var statusLabelRef = querySingle(Map.of("css", "#statusLabel")).get("ref");
+
+        // 1. Double Click
+        perform(Map.of("type", "doubleClick", "target", Map.of("ref", mouseAreaRef)));
+        assertStatus(statusLabelRef, "Status: DoubleClicked");
+
+        // 2. Mouse Pressed
+        perform(Map.of("type", "mousePressed", "target", Map.of("ref", mouseAreaRef)));
+        assertStatus(statusLabelRef, "Status: Pressed");
+
+        // 3. Mouse Released
+        perform(Map.of("type", "mouseReleased", "target", Map.of("ref", mouseAreaRef)));
+        assertStatus(statusLabelRef, "Status: Released");
+
+        // 4. Drag (simulated small drag on the area)
+        perform(Map.of("type", "drag",
+                "from", Map.of("ref", mouseAreaRef),
+                "to", Map.of("ref", mouseAreaRef, "x", 50, "y", 50) // drag to center of itself relative? No, drag
+                                                                    // target is Ref + optional offset.
+        // Wait, ui_perform drag takes from: {ref, x, y} -> to: {ref, x, y}.
+        // Let's drag from (10,10) to (90,90) inside the mouseArea
+        ));
+        // ActionExecutor drag logic resolves bounds and adds offsets.
+        // It's safer to provide direct coordinates or carefully use ref.
+        // Let's try simplified drag.
+        // Let's try simplified drag.
+        perform(Map.of("type", "drag",
+                "from", Map.of("ref", mouseAreaRef, "x", 10.0, "y", 10.0),
+                "to", Map.of("ref", mouseAreaRef, "x", 90.0, "y", 90.0)));
+        assertStatus(statusLabelRef, "Status: Dragged");
+
+        // 5. Scroll
+        // We can't easily assert scroll position without querying node properties
+        // deeply or checking visuals.
+        // But we can ensure it doesn't throw.
+        perform(Map.of("type", "scroll", "target", Map.of("ref", listViewRef), "deltaY", -5)); // Scroll down
+        perform(Map.of("type", "scroll", "target", Map.of("ref", listViewRef), "deltaY", 5)); // Scroll up
+
+        // 6. Press Key (ENTER to submit)
+        var inputMatch = querySingle(Map.of("css", "#input"));
+        perform(Map.of("type", "focus", "target", Map.of("ref", inputMatch.get("ref"))));
+        perform(Map.of("type", "setText", "target", Map.of("ref", inputMatch.get("ref")), "text", "KeyboardUser"));
+        perform(Map.of("type", "pressKey", "key", "ENTER"));
+
+        var greetingLabelRef = querySingle(Map.of("css", "#greeting")).get("ref");
+        assertStatus(greetingLabelRef, "Hello, KeyboardUser!");
+    }
+
+    private void perform(Map<String, Object> action) {
+        structuredOutput(client.callTool(new CallToolRequest(
+                "ui_perform",
+                Map.of("actions", List.of(action)))));
+        WaitForAsyncUtils.waitForFxEvents();
+    }
+
+    private void assertStatus(Object statusLabelRef, String expectedText) {
+        long start = System.currentTimeMillis();
+        String currentText = "";
+        while (System.currentTimeMillis() - start < 2000) {
+            var node = structuredOutput(
+                    client.callTool(new CallToolRequest("ui_get_node", Map.of("ref", statusLabelRef))));
+            @SuppressWarnings("unchecked")
+            var textMap = (Map<String, Object>) node.get("text");
+            currentText = (String) textMap.get("label");
+            if (expectedText.equals(currentText)) {
+                return;
+            }
+            WaitForAsyncUtils.waitForFxEvents();
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        assertEquals(expectedText, currentText, "Status label did not update in time");
     }
 
     @SuppressWarnings("unchecked")
