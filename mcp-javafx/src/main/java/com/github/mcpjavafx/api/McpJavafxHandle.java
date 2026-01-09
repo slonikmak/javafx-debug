@@ -22,11 +22,6 @@ public interface McpJavafxHandle extends AutoCloseable {
     String endpoint();
 
     /**
-     * Returns the authentication token.
-     */
-    String token();
-
-    /**
      * Stops the server and releases resources.
      */
     @Override

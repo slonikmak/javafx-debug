@@ -34,14 +34,12 @@ public class HttpMcpServer {
     private static final String HEALTH_ENDPOINT = "/health";
 
     private final McpJavafxConfig config;
-    private final String token;
     private Server jettyServer;
     private McpStatelessSyncServer mcpServer;
     private int actualPort;
 
-    public HttpMcpServer(McpJavafxConfig config, String token) {
+    public HttpMcpServer(McpJavafxConfig config) {
         this.config = config;
-        this.token = token;
     }
 
     /**
@@ -107,14 +105,6 @@ public class HttpMcpServer {
         // Sanitize initialize payloads for older SDK compatibility
         var sanitizeFilterHolder = new FilterHolder(new RequestSanitizingFilter());
         context.addFilter(sanitizeFilterHolder, MCP_ENDPOINT + "/*", EnumSet.of(DispatcherType.REQUEST));
-
-        // Add security filter for authorization (before MCP endpoint)
-        if (config.authEnabled()) {
-            var filterHolder = new FilterHolder(new AuthorizationFilter(token));
-            context.addFilter(filterHolder, MCP_ENDPOINT + "/*", EnumSet.of(DispatcherType.REQUEST));
-        } else {
-            LOG.warning("MCP JavaFX Debug authorization is disabled");
-        }
 
         // Handle logging/setLevel for clients before SDK transport
         var loggingFilterHolder = new FilterHolder(new LoggingSetLevelFilter());

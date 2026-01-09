@@ -1,7 +1,6 @@
 package com.github.mcpjavafx.api;
 
 import java.util.Objects;
-import java.util.UUID;
 
 /**
  * Configuration for MCP JavaFX Debug server.
@@ -10,9 +9,7 @@ import java.util.UUID;
  * @param transport        transport mode (HTTP_LOCAL by default)
  * @param bindHost         host to bind to (127.0.0.1 by default)
  * @param port             port to bind to (0 = auto-select)
- * @param token            authentication token (null = generate and log)
  * @param allowActions     whether to allow UI actions (click, type, etc.)
- * @param authEnabled      whether MCP endpoint requires Authorization header
  * @param snapshotDefaults default snapshot options
  * @param fxTimeoutMs      timeout for FX thread operations
  * @param serverShutdownMs timeout for server shutdown
@@ -23,9 +20,7 @@ public record McpJavafxConfig(
         Transport transport,
         String bindHost,
         int port,
-        String token,
         boolean allowActions,
-        boolean authEnabled,
         SnapshotOptions snapshotDefaults,
         int fxTimeoutMs,
         int serverShutdownMs,
@@ -40,14 +35,13 @@ public record McpJavafxConfig(
                 Transport.HTTP_LOCAL,
                 DEFAULT_BIND_HOST,
                 0,
-                null,
-                true,
                 true,
                 SnapshotOptions.DEFAULT,
                 DEFAULT_FX_TIMEOUT_MS,
                 DEFAULT_SERVER_SHUTDOWN_MS,
                 false);
     }
+
     public static Builder builder() {
         return new Builder();
     }
@@ -61,14 +55,13 @@ public record McpJavafxConfig(
                 parseTransport(System.getProperty("mcp.transport", "http")),
                 System.getProperty("mcp.bind", DEFAULT_BIND_HOST),
                 Integer.parseInt(System.getProperty("mcp.port", "0")),
-                System.getProperty("mcp.token"),
                 Boolean.parseBoolean(System.getProperty("mcp.allowActions", "true")),
-                Boolean.parseBoolean(System.getProperty("mcp.auth", "true")),
                 parseSnapshotOptions(),
                 Integer.parseInt(System.getProperty("mcp.fxTimeout", String.valueOf(DEFAULT_FX_TIMEOUT_MS))),
                 DEFAULT_SERVER_SHUTDOWN_MS,
                 Boolean.parseBoolean(System.getProperty("mcp.http.logRequests", "false")));
     }
+
     private static Transport parseTransport(String value) {
         return switch (value.toLowerCase()) {
             case "http", "http_local" -> Transport.HTTP_LOCAL;
@@ -87,21 +80,12 @@ public record McpJavafxConfig(
                 .build();
     }
 
-    /**
-     * Returns token, generating one if not provided.
-     */
-    public String effectiveToken() {
-        return token != null ? token : UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-    }
-
     public static class Builder {
         private boolean enabled = false;
         private Transport transport = Transport.HTTP_LOCAL;
         private String bindHost = DEFAULT_BIND_HOST;
         private int port = 0;
-        private String token = null;
         private boolean allowActions = true;
-        private boolean authEnabled = true;
         private SnapshotOptions snapshotDefaults = SnapshotOptions.DEFAULT;
         private int fxTimeoutMs = DEFAULT_FX_TIMEOUT_MS;
         private int serverShutdownMs = DEFAULT_SERVER_SHUTDOWN_MS;
@@ -127,18 +111,8 @@ public record McpJavafxConfig(
             return this;
         }
 
-        public Builder token(String token) {
-            this.token = token;
-            return this;
-        }
-
         public Builder allowActions(boolean allowActions) {
             this.allowActions = allowActions;
-            return this;
-        }
-
-        public Builder authEnabled(boolean authEnabled) {
-            this.authEnabled = authEnabled;
             return this;
         }
 
@@ -146,6 +120,7 @@ public record McpJavafxConfig(
             this.snapshotDefaults = Objects.requireNonNull(snapshotDefaults);
             return this;
         }
+
         public Builder fxTimeoutMs(int fxTimeoutMs) {
             this.fxTimeoutMs = fxTimeoutMs;
             return this;
@@ -162,9 +137,7 @@ public record McpJavafxConfig(
                     transport,
                     bindHost,
                     port,
-                    token,
                     allowActions,
-                    authEnabled,
                     snapshotDefaults,
                     fxTimeoutMs,
                     serverShutdownMs,

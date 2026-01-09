@@ -12,7 +12,6 @@ public class DemoAppLauncher {
         // Force enable MCP for development/testing
         System.setProperty("mcp.ui", "true");
         System.setProperty("mcp.allowActions", "true");
-        System.setProperty("mcp.auth", "false");
         System.setProperty("mcp.port", "55667");
 
         // Manually start MCP since we are not using the javaagent in this launcher

@@ -3,99 +3,129 @@
 A library for debugging JavaFX applications via MCP (Model Context Protocol). Allows LLMs to connect to your JavaFX application, inspect the UI structure, and perform actions.
 
 For detailed documentation, see:
-- [User Manual](docs/manual.md) (Features, Building, Configuration)
-- [Tools Reference](docs/tools.md) (API, Tools, Strategies)
+- [User Manual](docs/manual.md)
+- [Tools Reference](docs/tools.md)
 
 ## Quick Start
 
-### 1. Add Dependency
+### Option A: Download JAR (Recommended)
+
+1. Download `mcp-javafx-X.X.X.jar` from [Releases](https://github.com/mcp-javafx/mcp-javafx-debug/releases)
+2. Place it in your project (e.g., `libs/mcp-javafx.jar`)
+3. Run your application with the agent:
+
+```bash
+java -Dmcp.ui=true -Dmcp.port=55667 -javaagent:libs/mcp-javafx.jar -jar your-app.jar
+```
+
+Or with `javafx-maven-plugin`:
+
+```xml
+<plugin>
+    <groupId>org.openjfx</groupId>
+    <artifactId>javafx-maven-plugin</artifactId>
+    <configuration>
+        <options>
+            <option>-Dmcp.ui=true</option>
+            <option>-Dmcp.port=55667</option>
+            <option>-javaagent:libs/mcp-javafx.jar</option>
+        </options>
+    </configuration>
+</plugin>
+```
+
+```bash
+mvn javafx:run
+```
+
+### Option B: Maven Dependency
+
+Add dependency to `pom.xml`:
 
 ```xml
 <dependency>
     <groupId>com.github.mcpjavafx</groupId>
-    <artifactId>mcp-javafx-debug</artifactId>
+    <artifactId>mcp-javafx</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
 
-### 2. Enable in Your Application
+Add Maven profile for auto-resolving JAR path:
 
-**Option A: System Properties**
-
-Run with `-Dmcp.ui=true`:
-
-```java
-public class MyApp extends Application {
-    @Override
-    public void start(Stage stage) {
-        McpJavafxDebug.startFromSystemProperties();
-        // ... your app code
-    }
-}
+```xml
+<profiles>
+    <profile>
+        <id>agent</id>
+        <!-- Required for screenshots if not already in your project -->
+        <dependencies>
+            <dependency>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-swing</artifactId>
+                <version>${javafx.version}</version>
+            </dependency>
+        </dependencies>
+        <build>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-dependency-plugin</artifactId>
+                    <version>3.6.1</version>
+                    <executions>
+                        <execution>
+                            <goals><goal>properties</goal></goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.openjfx</groupId>
+                    <artifactId>javafx-maven-plugin</artifactId>
+                    <configuration>
+                        <options>
+                            <option>-Dmcp.ui=true</option>
+                            <option>-Dmcp.port=55667</option>
+                            <option>"-javaagent:${com.github.mcpjavafx:mcp-javafx:jar}"</option>
+                        </options>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </build>
+    </profile>
+</profiles>
 ```
 
+> **Note:** `javafx-swing` is required for the `ui_screenshot` tool. If your project doesn't have it, add it to the profile as shown above.
+
+Run:
 ```bash
-java -Dmcp.ui=true -jar myapp.jar
+mvn initialize javafx:run -P agent
 ```
 
-**Option B: Programmatic Configuration**
+## Connect to LLM
 
-```java
-var handle = McpJavafxDebug.install(McpJavafxConfig.builder()
-    .enabled(true)
-    .port(8080)
-    .token("my-secret-token")
-    .build());
-```
-
-### 3. Connect
-
-After starting, you'll see the endpoint and token in the console:
-
+Console output after start:
 ```
 [MCP-JAVAFX] MCP JavaFX Debug enabled
-[MCP-JAVAFX] Endpoint: http://127.0.0.1:49321
-[MCP-JAVAFX] Token: abc123def456
+[MCP-JAVAFX] Endpoint: http://127.0.0.1:55667
 ```
 
-## Connecting to LLM Agents
-
-This library uses **HTTP** transport with a secure token.
-
-### 1. Claude Desktop (via HTTP Bridge)
-
-Since Claude Desktop uses STDIO by default, the recommended way to connect is via the MCP bridge:
-
-1.  Start your JavaFX application with `mcp.ui=true`:
-    ```bash
-    java -Dmcp.ui=true -jar your-app.jar
-    ```
-2.  Note the **Endpoint** and **Token** from console output
-3.  Add to your `claude_desktop_config.json`:
+Add to your IDE/Agent MCP configuration:
 
 ```json
 {
-  "mcpServers": {
-    "javafx-debug": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@thefoot/mcp-stdio-http-bridge",
-        "--endpoint", "http://127.0.0.1:<PORT>/mcp",
-        "--header", "Authorization: Bearer <TOKEN>"
-      ]
-    }
+  "javafx-debugger": {
+    "serverUrl": "http://127.0.0.1:55667/mcp"
   }
 }
 ```
 
-> Replace `<PORT>` and `<TOKEN>` with values from step 2.
+## System Properties
 
-### 2. Custom Agents / SDKs
-
-For custom agents using MCP SDKs:
-- **HTTP**: Use `HttpClientTransport` with `Authorization: Bearer <TOKEN>` header
-
+| Property | Default | Description |
+|----------|---------|-------------|
+| `mcp.ui` | `false` | Enable/disable the debug server |
+| `mcp.port` | `0` (auto) | HTTP port to bind |
+| `mcp.allowActions` | `true` | Allow UI actions (click, type, etc.) |
+| `mcp.bind` | `127.0.0.1` | Bind address |
 
 ## License
 

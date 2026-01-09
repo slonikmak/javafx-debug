@@ -7,7 +7,6 @@ import com.github.mcpjavafx.core.model.AccessibilityInfo;
 import com.github.mcpjavafx.core.model.Bounds;
 import com.github.mcpjavafx.core.model.FxProperties;
 import com.github.mcpjavafx.core.model.LayoutInfo;
-import com.github.mcpjavafx.core.model.NodeRef;
 import com.github.mcpjavafx.core.model.ScreenBounds;
 import com.github.mcpjavafx.core.model.TextInfo;
 import com.github.mcpjavafx.core.model.UiNode;
@@ -39,8 +38,6 @@ import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
-import javafx.stage.Window;
-
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -328,34 +325,6 @@ public class SceneGraphSnapshotter {
                 }
             }
         } catch (Exception ignored) {
-        }
-        return 0;
-    }
-
-    private NodeRef createNodeRef(Node node, String path) {
-        return nodeRefService.forNode(node);
-    }
-
-    private String getOrCreateUid(Node node) {
-        return nodeRefService.getOrCreateUid(node);
-    }
-
-    private String buildNodePath(Node node, int stageIndex) {
-        return nodeRefService.buildPath(node, stageIndex);
-    }
-
-    private int getChildIndex(Parent parent, Node child) {
-        var children = parent.getChildrenUnmodifiable();
-        var typeName = child.getClass().getSimpleName();
-        int typeIndex = 0;
-
-        for (var c : children) {
-            if (c == child) {
-                return typeIndex;
-            }
-            if (c.getClass().getSimpleName().equals(typeName)) {
-                typeIndex++;
-            }
         }
         return 0;
     }

@@ -49,16 +49,14 @@ public final class McpJavafxDebug {
             throw new IllegalStateException("MCP JavaFX Debug server is already running");
         }
 
-        var token = config.effectiveToken();
         var handle = switch (config.transport()) {
-            case HTTP_LOCAL -> startHttpServer(config, token);
+            case HTTP_LOCAL -> startHttpServer(config);
         };
 
         INSTANCE.set(handle);
 
         McpLogger.info("MCP JavaFX Debug enabled");
         McpLogger.info("Endpoint: " + handle.endpoint());
-        McpLogger.info("Token: " + token);
 
         return handle;
     }
@@ -74,7 +72,6 @@ public final class McpJavafxDebug {
      * <li>mcp.transport - http (default)</li>
      * <li>mcp.bind - bind host (default: 127.0.0.1)</li>
      * <li>mcp.port - port (default: 0 = auto)</li>
-     * <li>mcp.token - authentication token</li>
      * <li>mcp.allowActions - true/false</li>
      * </ul>
      *
@@ -92,11 +89,11 @@ public final class McpJavafxDebug {
         return INSTANCE.get();
     }
 
-    private static McpJavafxHandle startHttpServer(McpJavafxConfig config, String token) {
+    private static McpJavafxHandle startHttpServer(McpJavafxConfig config) {
         try {
-            var server = new HttpMcpServer(config, token);
+            var server = new HttpMcpServer(config);
             var port = server.start();
-            return new HttpHandle(config, server, port, token);
+            return new HttpHandle(config, server, port);
         } catch (Exception e) {
             throw new RuntimeException("Failed to start MCP HTTP server", e);
         }
@@ -109,14 +106,12 @@ public final class McpJavafxDebug {
         private final McpJavafxConfig config;
         private final HttpMcpServer server;
         private final int port;
-        private final String token;
         private volatile boolean running = true;
 
-        HttpHandle(McpJavafxConfig config, HttpMcpServer server, int port, String token) {
+        HttpHandle(McpJavafxConfig config, HttpMcpServer server, int port) {
             this.config = config;
             this.server = server;
             this.port = port;
-            this.token = token;
         }
 
         @Override
@@ -132,11 +127,6 @@ public final class McpJavafxDebug {
         @Override
         public String endpoint() {
             return "http://" + config.bindHost() + ":" + port;
-        }
-
-        @Override
-        public String token() {
-            return token;
         }
 
         @Override
@@ -172,11 +162,6 @@ public final class McpJavafxDebug {
 
         @Override
         public String endpoint() {
-            return null;
-        }
-
-        @Override
-        public String token() {
             return null;
         }
 

@@ -36,8 +36,6 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class McpClientStreamableHttpE2eTest extends ApplicationTest {
 
-    private static final String TOKEN = "test-token";
-
     private static HttpMcpServer server;
     private static int port;
 
@@ -58,9 +56,8 @@ class McpClientStreamableHttpE2eTest extends ApplicationTest {
                 .bindHost(McpJavafxConfig.DEFAULT_BIND_HOST)
                 .port(0)
                 .allowActions(true)
-                .authEnabled(true)
                 .build();
-        server = new HttpMcpServer(config, TOKEN);
+        server = new HttpMcpServer(config);
         port = server.start();
     }
 
@@ -125,7 +122,6 @@ class McpClientStreamableHttpE2eTest extends ApplicationTest {
     void createClient() {
         var transport = HttpClientStreamableHttpTransport.builder("http://127.0.0.1:" + port)
                 .endpoint("/mcp")
-                .customizeRequest(builder -> builder.header("Authorization", "Bearer " + TOKEN))
                 .build();
 
         client = McpClient.sync(transport)

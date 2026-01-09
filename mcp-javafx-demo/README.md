@@ -10,6 +10,16 @@ mvn javafx:run -pl mcp-javafx-demo
 
 Или через IDE: запустить класс `DemoAppLauncher`.
 
+### Запуск с профилем (Java Agent)
+
+Для автоматического подключения агента без изменений в коде (используется `DemoApp` вместо `DemoAppLauncher`):
+
+```bash
+mvn initialize javafx:run -P agent -pl mcp-javafx-demo
+```
+Этот профиль автоматически находит JAR агента и подключает его через `-javaagent`.
+
+
 ## Функции приложения
 
 ### Простой UI (верхняя часть)
@@ -70,7 +80,6 @@ mvn javafx:run -pl mcp-javafx-demo
 
 ```
 Endpoint: http://127.0.0.1:XXXXX
-Token: XXXXXXXXXXXXXXXX
 ```
 
 ### Примеры MCP действий
