@@ -8,6 +8,7 @@ import com.github.mcpjavafx.core.actions.ActionExecutor;
 import com.github.mcpjavafx.core.capture.SceneGraphSnapshotter;
 import com.github.mcpjavafx.core.capture.TreeFormatter;
 import com.github.mcpjavafx.core.fx.FxTimeoutException;
+import com.github.mcpjavafx.core.fx.NodeRefService;
 import com.github.mcpjavafx.core.model.ErrorCode;
 import com.github.mcpjavafx.core.model.McpError;
 import com.github.mcpjavafx.core.model.NodeRef;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -29,6 +31,7 @@ public class UiToolsService {
 
     private static final Logger LOG = Logger.getLogger(UiToolsService.class.getName());
     private static final int COMPACT_DEFAULT_DEPTH = 8;
+    private static final int DEFAULT_QUERY_LIMIT = 50;
     private static final Set<String> SNAPSHOT_NODE_FIELDS = Set.of("ref", "type", "id", "text", "value", "children");
 
     private final McpJavafxConfig config;
@@ -39,63 +42,28 @@ public class UiToolsService {
     private final TreeFormatter treeFormatter;
 
     public UiToolsService(McpJavafxConfig config, ObjectMapper mapper) {
-        this.config = config;
-        this.mapper = mapper;
+        this(config, mapper, new NodeRefService());
+    }
+
+    public UiToolsService(McpJavafxConfig config, ObjectMapper mapper, NodeRefService nodeRefService) {
+        this.config = Objects.requireNonNull(config, "config");
+        this.mapper = Objects.requireNonNull(mapper, "mapper");
+        Objects.requireNonNull(nodeRefService, "nodeRefService");
+
         this.snapshotter = new SceneGraphSnapshotter(config.fxTimeoutMs());
         this.queryService = new NodeQueryService(config.fxTimeoutMs());
-        this.actionExecutor = new ActionExecutor(config.fxTimeoutMs(), queryService);
+        this.actionExecutor = new ActionExecutor(config.fxTimeoutMs(), queryService, nodeRefService);
         this.treeFormatter = new TreeFormatter();
     }
 
     public Object executeGetSnapshot(JsonNode input) throws Exception {
-        var stageModeStr = input.path("stage").textValue() != null ? input.path("stage").textValue() : "focused";
+        var stageModeStr = getTextOrDefault(input, "stage", "focused");
         var stageMode = parseStageMode(stageModeStr);
         var stageIndex = input.path("stageIndex").asInt(0);
-        var mode = (input.path("mode").textValue() != null ? input.path("mode").textValue() : "compact").toLowerCase();
+        var mode = getTextOrDefault(input, "mode", "compact").toLowerCase();
         var compact = !"full".equals(mode);
 
-        var defaultDepth = compact ? Math.min(config.snapshotDefaults().depth(), COMPACT_DEFAULT_DEPTH)
-                : config.snapshotDefaults().depth();
-        var depth = input.has("depth") ? input.path("depth").asInt(defaultDepth) : defaultDepth;
-
-        var includeNode = input.path("include");
-        var includeBounds = includeNode.has("bounds")
-                ? includeNode.path("bounds").asBoolean()
-                : (compact ? false : config.snapshotDefaults().includeBounds());
-        var includeLocalToScreen = includeNode.has("localToScreen")
-                ? includeNode.path("localToScreen").asBoolean()
-                : (compact ? false : config.snapshotDefaults().includeLocalToScreen());
-        var includeProperties = includeNode.has("properties")
-                ? includeNode.path("properties").asBoolean()
-                : (compact ? false : config.snapshotDefaults().includeProperties());
-        var includeVirtualization = includeNode.has("virtualization")
-                ? includeNode.path("virtualization").asBoolean()
-                : (compact ? false : config.snapshotDefaults().includeVirtualization());
-        var includeAccessibility = includeNode.has("accessibility")
-                ? includeNode.path("accessibility").asBoolean()
-                : (compact ? false : config.snapshotDefaults().includeAccessibility());
-        var includeControlInternals = includeNode.has("controlInternals")
-                ? includeNode.path("controlInternals").asBoolean()
-                : (compact ? false : false);
-
-        var skeleton = compact
-                && !includeBounds
-                && !includeLocalToScreen
-                && !includeProperties
-                && !includeVirtualization
-                && !includeAccessibility;
-
-        var options = SnapshotOptions.builder()
-                .depth(depth)
-                .includeBounds(includeBounds)
-                .includeLocalToScreen(includeLocalToScreen)
-                .includeProperties(includeProperties)
-                .includeVirtualization(includeVirtualization)
-                .includeAccessibility(includeAccessibility)
-                .includeControlInternals(includeControlInternals)
-                .skeleton(skeleton)
-                .build();
-
+        var options = buildSnapshotOptions(input, compact);
         var snapshot = snapshotter.capture(stageMode, stageIndex, options);
 
         if (snapshot.stages().isEmpty()) {
@@ -108,6 +76,44 @@ public class UiToolsService {
         return new SnapshotResult(tree, structured);
     }
 
+    private SnapshotOptions buildSnapshotOptions(JsonNode input, boolean compact) {
+        var defaultDepth = compact
+                ? Math.min(config.snapshotDefaults().depth(), COMPACT_DEFAULT_DEPTH)
+                : config.snapshotDefaults().depth();
+        var depth = input.has("depth") ? input.path("depth").asInt(defaultDepth) : defaultDepth;
+
+        var includeNode = input.path("include");
+        var includeBounds = getBooleanOrDefault(includeNode, "bounds",
+                compact ? false : config.snapshotDefaults().includeBounds());
+        var includeLocalToScreen = getBooleanOrDefault(includeNode, "localToScreen",
+                compact ? false : config.snapshotDefaults().includeLocalToScreen());
+        var includeProperties = getBooleanOrDefault(includeNode, "properties",
+                compact ? false : config.snapshotDefaults().includeProperties());
+        var includeVirtualization = getBooleanOrDefault(includeNode, "virtualization",
+                compact ? false : config.snapshotDefaults().includeVirtualization());
+        var includeAccessibility = getBooleanOrDefault(includeNode, "accessibility",
+                compact ? false : config.snapshotDefaults().includeAccessibility());
+        var includeControlInternals = getBooleanOrDefault(includeNode, "controlInternals", false);
+
+        var skeleton = compact
+                && !includeBounds
+                && !includeLocalToScreen
+                && !includeProperties
+                && !includeVirtualization
+                && !includeAccessibility;
+
+        return SnapshotOptions.builder()
+                .depth(depth)
+                .includeBounds(includeBounds)
+                .includeLocalToScreen(includeLocalToScreen)
+                .includeProperties(includeProperties)
+                .includeVirtualization(includeVirtualization)
+                .includeAccessibility(includeAccessibility)
+                .includeControlInternals(includeControlInternals)
+                .skeleton(skeleton)
+                .build();
+    }
+
     public Object executeQuery(JsonNode input) throws Exception {
         var scopeNode = input.path("scope");
         var stageIndex = scopeNode.path("stageIndex").asInt(-1);
@@ -115,7 +121,7 @@ public class UiToolsService {
         if ("focused".equals(scopeStage)) {
             stageIndex = -1;
         }
-        var limit = input.path("limit").asInt(50);
+        var limit = input.path("limit").asInt(DEFAULT_QUERY_LIMIT);
 
         var selectorNode = input.path("selector");
         List<NodeQueryService.QueryMatch> matches;
@@ -125,8 +131,7 @@ public class UiToolsService {
             matches = queryService.queryCss(stageIndex, css, limit);
         } else if (selectorNode.has("text")) {
             var text = selectorNode.path("text").asText();
-            var matchMode = selectorNode.path("match").textValue() != null ? selectorNode.path("match").textValue()
-                    : "contains";
+            var matchMode = getTextOrDefault(selectorNode, "match", "contains");
             matches = queryService.queryText(stageIndex, text, matchMode, limit);
         } else if (selectorNode.has("predicate")) {
             var predicate = mapper.treeToValue(selectorNode.path("predicate"), QueryPredicate.class);
@@ -176,72 +181,73 @@ public class UiToolsService {
         var results = new ArrayList<ActionExecutor.ActionResult>();
         for (var actionNode : actionsNode) {
             var type = actionNode.path("type").asText();
-
-            ActionExecutor.ActionResult res = switch (type) {
-                case "click" -> actionExecutor.click(
-                        extractTargetRef(actionNode),
-                        extractDouble(actionNode.path("x")),
-                        extractDouble(actionNode.path("y")));
-                case "focus" -> actionExecutor.focus(extractTargetRef(actionNode));
-                case "setText" ->
-                    actionExecutor.setText(extractTargetRef(actionNode), actionNode.path("text").asText());
-                case "typeText" -> actionExecutor.typeText(actionNode.path("text").asText());
-                case "pressKey" -> actionExecutor.pressKey(
-                        actionNode.path("key").asText(),
-                        parseModifiers(actionNode.path("modifiers")));
-                case "scroll" -> actionExecutor.scroll(extractTargetRef(actionNode), actionNode.path("deltaY").asInt());
-                case "doubleClick" -> actionExecutor.doubleClick(
-                        extractTargetRef(actionNode),
-                        extractDouble(actionNode.path("x")),
-                        extractDouble(actionNode.path("y")));
-                case "mousePressed" -> actionExecutor.mousePressed(
-                        extractTargetRef(actionNode),
-                        actionNode.path("button").asText("PRIMARY"),
-                        extractDouble(actionNode.path("x")),
-                        extractDouble(actionNode.path("y")));
-                case "mouseReleased" -> actionExecutor.mouseReleased(
-                        extractTargetRef(actionNode),
-                        actionNode.path("button").asText("PRIMARY"),
-                        extractDouble(actionNode.path("x")),
-                        extractDouble(actionNode.path("y")));
-                case "drag" -> actionExecutor.drag(
-                        extractFromRef(actionNode),
-                        extractDouble(actionNode.path("from").path("x")),
-                        extractDouble(actionNode.path("from").path("y")),
-                        extractToRef(actionNode),
-                        extractDouble(actionNode.path("to").path("x")),
-                        extractDouble(actionNode.path("to").path("y")),
-                        actionNode.path("button").asText("PRIMARY"));
-                default -> ActionExecutor.ActionResult.failure(type, "Unknown action type: " + type);
-            };
+            var res = executeAction(type, actionNode);
             results.add(res);
         }
 
         return Map.of("results", results);
     }
 
-    private NodeRef extractTargetRef(JsonNode actionNode) throws com.fasterxml.jackson.core.JsonProcessingException {
-        var refNode = actionNode.path("target").path("ref");
-        if (refNode.isMissingNode() || refNode.isNull()) {
-            return null;
-        }
-        return mapper.treeToValue(refNode, NodeRef.class);
+    private ActionExecutor.ActionResult executeAction(String type, JsonNode actionNode) throws Exception {
+        return switch (type) {
+            case "click" -> actionExecutor.click(
+                    extractRef(actionNode, "target", "ref"),
+                    extractDouble(actionNode.path("x")),
+                    extractDouble(actionNode.path("y")));
+            case "focus" -> actionExecutor.focus(extractRef(actionNode, "target", "ref"));
+            case "setText" -> actionExecutor.setText(
+                    extractRef(actionNode, "target", "ref"),
+                    actionNode.path("text").asText());
+            case "typeText" -> actionExecutor.typeText(actionNode.path("text").asText());
+            case "pressKey" -> actionExecutor.pressKey(
+                    actionNode.path("key").asText(),
+                    parseModifiers(actionNode.path("modifiers")));
+            case "scroll" -> actionExecutor.scroll(
+                    extractRef(actionNode, "target", "ref"),
+                    actionNode.path("deltaY").asInt());
+            case "doubleClick" -> actionExecutor.doubleClick(
+                    extractRef(actionNode, "target", "ref"),
+                    extractDouble(actionNode.path("x")),
+                    extractDouble(actionNode.path("y")));
+            case "mousePressed" -> actionExecutor.mousePressed(
+                    extractRef(actionNode, "target", "ref"),
+                    actionNode.path("button").asText("PRIMARY"),
+                    extractDouble(actionNode.path("x")),
+                    extractDouble(actionNode.path("y")));
+            case "mouseReleased" -> actionExecutor.mouseReleased(
+                    extractRef(actionNode, "target", "ref"),
+                    actionNode.path("button").asText("PRIMARY"),
+                    extractDouble(actionNode.path("x")),
+                    extractDouble(actionNode.path("y")));
+            case "drag" -> actionExecutor.drag(
+                    extractRef(actionNode, "from", "ref"),
+                    extractDouble(actionNode.path("from").path("x")),
+                    extractDouble(actionNode.path("from").path("y")),
+                    extractRef(actionNode, "to", "ref"),
+                    extractDouble(actionNode.path("to").path("x")),
+                    extractDouble(actionNode.path("to").path("y")),
+                    actionNode.path("button").asText("PRIMARY"));
+            default -> ActionExecutor.ActionResult.failure(type, "Unknown action type: " + type);
+        };
     }
 
-    private NodeRef extractFromRef(JsonNode actionNode) throws com.fasterxml.jackson.core.JsonProcessingException {
-        var refNode = actionNode.path("from").path("ref");
-        if (refNode.isMissingNode() || refNode.isNull()) {
+    /**
+     * Extracts a NodeRef from a nested path in the JSON node.
+     * 
+     * @param node      the root node
+     * @param pathParts the path segments to navigate (e.g., "target", "ref")
+     * @return the NodeRef or null if not found
+     */
+    private NodeRef extractRef(JsonNode node, String... pathParts)
+            throws com.fasterxml.jackson.core.JsonProcessingException {
+        JsonNode current = node;
+        for (String part : pathParts) {
+            current = current.path(part);
+        }
+        if (current.isMissingNode() || current.isNull()) {
             return null;
         }
-        return mapper.treeToValue(refNode, NodeRef.class);
-    }
-
-    private NodeRef extractToRef(JsonNode actionNode) throws com.fasterxml.jackson.core.JsonProcessingException {
-        var refNode = actionNode.path("to").path("ref");
-        if (refNode.isMissingNode() || refNode.isNull()) {
-            return null;
-        }
-        return mapper.treeToValue(refNode, NodeRef.class);
+        return mapper.treeToValue(current, NodeRef.class);
     }
 
     private Double extractDouble(JsonNode node) {
@@ -266,6 +272,20 @@ public class UiToolsService {
         }
         LOG.log(Level.WARNING, "Error executing UI tool", e);
         return McpError.of(ErrorCode.MCP_UI_INTERNAL, e.getMessage());
+    }
+
+    // --- Helper methods for cleaner JSON parsing ---
+
+    private String getTextOrDefault(JsonNode node, String field, String defaultValue) {
+        var value = node.path(field).textValue();
+        return value != null ? value : defaultValue;
+    }
+
+    private boolean getBooleanOrDefault(JsonNode node, String field, boolean defaultValue) {
+        if (node.has(field)) {
+            return node.path(field).asBoolean();
+        }
+        return defaultValue;
     }
 
     private SceneGraphSnapshotter.StageMode parseStageMode(String mode) {
@@ -293,7 +313,7 @@ public class UiToolsService {
         if (node == null || !node.isArray()) {
             return List.of();
         }
-        var result = new java.util.ArrayList<String>();
+        var result = new ArrayList<String>();
         for (var val : node) {
             if (val.isTextual() && !val.asText().isBlank()) {
                 result.add(val.asText());

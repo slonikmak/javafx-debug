@@ -1,12 +1,9 @@
 package com.github.mcpjavafx.transport.http;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.github.mcpjavafx.api.McpJavafxConfig;
 import com.github.mcpjavafx.mcp.McpPromptAdapter;
 import com.github.mcpjavafx.mcp.McpToolAdapter;
+import com.github.mcpjavafx.util.JsonMapperFactory;
 import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpStatelessSyncServer;
@@ -53,13 +50,8 @@ public class HttpMcpServer {
      * @return the actual port the server is listening on
      */
     public int start() throws Exception {
-        // Be liberal in what we accept: clients (VS Code/Inspectors) may send
-        // forward-compatible capabilities fields that the current SDK schema
-        // doesn't model yet (e.g. capabilities.elicitation.*).
-        var objectMapper = new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        // Use centralized mapper configuration
+        var objectMapper = JsonMapperFactory.createDefault();
         var jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
         // Create MCP SDK Stateless Streamable HTTP transport (Servlet)

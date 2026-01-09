@@ -1,6 +1,8 @@
 package com.github.mcpjavafx.core.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.github.mcpjavafx.util.StringUtils;
+
 import java.util.List;
 
 /**
@@ -25,6 +27,9 @@ public record UiNode(
         FxProperties fx,
         VirtualizationInfo virtualization,
         List<UiNode> children) {
+
+    private static final int SUMMARY_MAX_LENGTH = 20;
+
     /**
      * Creates a short summary for query results.
      * Examples: "Button[text=OK]", "TextField[prompt=Enter name]"
@@ -34,7 +39,7 @@ public record UiNode(
         var hasDetails = false;
 
         if (text != null && text.label() != null && !text.label().isEmpty()) {
-            sb.append("[text=").append(truncate(text.label(), 20));
+            sb.append("[text=").append(StringUtils.truncate(text.label(), SUMMARY_MAX_LENGTH));
             hasDetails = true;
         }
         if (text != null && text.prompt() != null && !text.prompt().isEmpty()) {
@@ -43,7 +48,7 @@ public record UiNode(
             } else {
                 sb.append("[");
             }
-            sb.append("prompt=").append(truncate(text.prompt(), 20));
+            sb.append("prompt=").append(StringUtils.truncate(text.prompt(), SUMMARY_MAX_LENGTH));
             hasDetails = true;
         }
         if (virtualization != null) {
@@ -60,12 +65,5 @@ public record UiNode(
         }
 
         return sb.toString();
-    }
-
-    private static String truncate(String s, int maxLen) {
-        if (s.length() <= maxLen) {
-            return s;
-        }
-        return s.substring(0, maxLen - 3) + "...";
     }
 }

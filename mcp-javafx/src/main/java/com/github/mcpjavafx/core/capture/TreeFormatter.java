@@ -2,6 +2,7 @@ package com.github.mcpjavafx.core.capture;
 
 import com.github.mcpjavafx.core.model.UiNode;
 import com.github.mcpjavafx.core.model.UiSnapshot;
+import com.github.mcpjavafx.util.StringUtils;
 
 import java.util.List;
 import java.util.Objects;
@@ -55,7 +56,7 @@ public class TreeFormatter {
 
         var label = primaryLabel(node);
         if (label != null && !label.isEmpty()) {
-            sb.append(' ').append('"').append(truncate(label)).append('"');
+            sb.append(' ').append('"').append(StringUtils.truncate(label, MAX_LABEL_LENGTH)).append('"');
         }
         sb.append(System.lineSeparator());
 
@@ -84,13 +85,6 @@ public class TreeFormatter {
         return null;
     }
 
-    private String truncate(String label) {
-        if (label.length() <= MAX_LABEL_LENGTH) {
-            return label;
-        }
-        return label.substring(0, MAX_LABEL_LENGTH - 3) + "...";
-    }
-
     private void indent(StringBuilder sb, int depth) {
         sb.append("  ".repeat(Math.max(depth, 0)));
     }
@@ -113,8 +107,7 @@ public class TreeFormatter {
                         stage.height(),
                         stage.scene() != null ? new UiSnapshot.SceneInfo(
                                 stage.scene().stylesheets(),
-                                stripNode(stage.scene().root())
-                        ) : null))
+                                stripNode(stage.scene().root())) : null))
                 .toList();
 
         return new UiSnapshot(

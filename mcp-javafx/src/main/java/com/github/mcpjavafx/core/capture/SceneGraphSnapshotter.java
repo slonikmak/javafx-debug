@@ -3,18 +3,48 @@ package com.github.mcpjavafx.core.capture;
 import com.github.mcpjavafx.api.SnapshotOptions;
 import com.github.mcpjavafx.core.fx.Fx;
 import com.github.mcpjavafx.core.fx.NodeRefService;
-import com.github.mcpjavafx.core.model.*;
+import com.github.mcpjavafx.core.model.AccessibilityInfo;
+import com.github.mcpjavafx.core.model.Bounds;
+import com.github.mcpjavafx.core.model.FxProperties;
+import com.github.mcpjavafx.core.model.LayoutInfo;
+import com.github.mcpjavafx.core.model.NodeRef;
+import com.github.mcpjavafx.core.model.ScreenBounds;
+import com.github.mcpjavafx.core.model.TextInfo;
+import com.github.mcpjavafx.core.model.UiNode;
+import com.github.mcpjavafx.core.model.UiSnapshot;
+import com.github.mcpjavafx.core.model.ValueInfo;
+import com.github.mcpjavafx.core.model.VirtualizationInfo;
 
 import javafx.scene.Node;
 import javafx.scene.Parent;
-import javafx.scene.control.*;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.ColorPicker;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Control;
+import javafx.scene.control.DatePicker;
+import javafx.scene.control.Labeled;
+import javafx.scene.control.ListView;
+import javafx.scene.control.ProgressBar;
+import javafx.scene.control.ProgressIndicator;
+import javafx.scene.control.RadioButton;
+import javafx.scene.control.ScrollBar;
+import javafx.scene.control.Separator;
+import javafx.scene.control.Slider;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextInputControl;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.TreeItem;
+import javafx.scene.control.TreeView;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Captures the JavaFX scene graph as a serializable snapshot.
@@ -231,17 +261,17 @@ public class SceneGraphSnapshotter {
         }
         // Black box controls - treat as leaves unless explicitly requested
         if (node instanceof TextInputControl ||
-            node instanceof Labeled ||
-            node instanceof Slider ||
-            node instanceof ProgressBar ||
-            node instanceof ProgressIndicator ||
-            node instanceof ScrollBar ||
-            node instanceof Separator ||
-            node instanceof ComboBox ||
-            node instanceof ChoiceBox ||
-            node instanceof Spinner ||
-            node instanceof ColorPicker ||
-            node instanceof DatePicker) {
+                node instanceof Labeled ||
+                node instanceof Slider ||
+                node instanceof ProgressBar ||
+                node instanceof ProgressIndicator ||
+                node instanceof ScrollBar ||
+                node instanceof Separator ||
+                node instanceof ComboBox ||
+                node instanceof ChoiceBox ||
+                node instanceof Spinner ||
+                node instanceof ColorPicker ||
+                node instanceof DatePicker) {
             return false;
         }
         return true;
@@ -454,7 +484,8 @@ public class SceneGraphSnapshotter {
             }
         }
 
-        // Safe serialization for userData to avoid Jackson issues with arbitrary objects
+        // Safe serialization for userData to avoid Jackson issues with arbitrary
+        // objects
         Object safeUserData = null;
         if (userData != null) {
             if (userData instanceof String || userData instanceof Number || userData instanceof Boolean) {

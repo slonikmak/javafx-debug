@@ -15,27 +15,40 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.input.MouseButton;
 import javafx.scene.robot.Robot;
 import javafx.stage.Stage;
-import javafx.stage.Window;
 
 import javax.imageio.ImageIO;
 import java.io.ByteArrayOutputStream;
 import java.util.Base64;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Executes UI actions like click, type, focus, etc.
  */
 public class ActionExecutor {
 
+    private static final Logger LOG = Logger.getLogger(ActionExecutor.class.getName());
+
+    // --- Constants to avoid magic numbers ---
+    private static final int DRAG_STEPS = 10;
+    private static final int DRAG_STEP_DELAY_MS = 10;
+    private static final int DEFAULT_DOUBLE_CLICK_INTERVAL_MS = 200;
+    private static final int DOUBLE_CLICK_WAIT_DIVISOR = 4;
+
     private final int fxTimeoutMs;
     private final NodeQueryService queryService;
-    private final NodeRefService nodeRefService = new NodeRefService();
+    private final NodeRefService nodeRefService;
     private Robot robot;
 
-    public ActionExecutor(int fxTimeoutMs, NodeQueryService queryService) {
+    public ActionExecutor(int fxTimeoutMs, NodeQueryService queryService, NodeRefService nodeRefService) {
+        if (fxTimeoutMs <= 0) {
+            throw new IllegalArgumentException("fxTimeoutMs must be positive");
+        }
         this.fxTimeoutMs = fxTimeoutMs;
-        this.queryService = queryService;
+        this.queryService = Objects.requireNonNull(queryService, "queryService");
+        this.nodeRefService = Objects.requireNonNull(nodeRefService, "nodeRefService");
     }
 
     /**
@@ -52,6 +65,18 @@ public class ActionExecutor {
     }
 
     /**
+     * Screen position for mouse actions.
+     */
+    private record ScreenPosition(double x, double y) {
+    }
+
+    /**
+     * Result of resolving a node with its screen bounds.
+     */
+    private record ResolvedNode(Node node, Bounds screenBounds) {
+    }
+
+    /**
      * Initializes the Robot on FX thread if not already done.
      */
     private Robot getRobot() {
@@ -60,6 +85,60 @@ public class ActionExecutor {
         }
         return robot;
     }
+
+    // --- Common Helper Methods (DRY) ---
+
+    /**
+     * Calculates screen position based on bounds and optional offsets.
+     * If x/y are provided, uses them as offsets from bounds origin.
+     * Otherwise, returns the center of the bounds.
+     */
+    private ScreenPosition calculatePosition(Bounds screenBounds, Double x, Double y) {
+        if (x != null && y != null) {
+            return new ScreenPosition(screenBounds.getMinX() + x, screenBounds.getMinY() + y);
+        }
+        return new ScreenPosition(
+                screenBounds.getMinX() + screenBounds.getWidth() / 2,
+                screenBounds.getMinY() + screenBounds.getHeight() / 2);
+    }
+
+    /**
+     * Resolves a node reference and gets its screen bounds.
+     * Returns null if node not found or bounds unavailable.
+     */
+    private ResolvedNode resolveNode(NodeRef ref, String actionType) {
+        if (ref == null) {
+            return null;
+        }
+
+        var node = queryService.findByRef(ref);
+        if (node == null) {
+            return null;
+        }
+
+        bringWindowToFront(node);
+
+        var screenBounds = getScreenBounds(node);
+        if (screenBounds == null) {
+            return null;
+        }
+
+        return new ResolvedNode(node, screenBounds);
+    }
+
+    /**
+     * Sleeps for the specified duration, properly handling interruption.
+     */
+    private void sleepSafely(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.log(Level.FINE, "Sleep interrupted", e);
+        }
+    }
+
+    // --- Action Methods ---
 
     /**
      * Focuses a node.
@@ -88,8 +167,7 @@ public class ActionExecutor {
             bringWindowToFront(node);
 
             // Prefer deterministic UI-level activation for common controls.
-            // This avoids flakiness when the window isn't focused or is covered by other
-            // windows. Only use if no specific coordinates are requested.
+            // This avoids flakiness when the window isn't focused or is covered.
             if (node instanceof ButtonBase button && x == null && y == null) {
                 button.fire();
                 return ActionResult.success("click");
@@ -100,17 +178,10 @@ public class ActionExecutor {
                 return ActionResult.failure("click", "Cannot get screen bounds for node");
             }
 
-            double clickX, clickY;
-            if (x != null && y != null) {
-                clickX = screenBounds.getMinX() + x;
-                clickY = screenBounds.getMinY() + y;
-            } else {
-                clickX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
-                clickY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
-            }
+            var pos = calculatePosition(screenBounds, x, y);
 
             var robot = getRobot();
-            robot.mouseMove(clickX, clickY);
+            robot.mouseMove(pos.x(), pos.y());
             robot.mouseClick(MouseButton.PRIMARY);
 
             return ActionResult.success("click");
@@ -134,42 +205,23 @@ public class ActionExecutor {
      */
     public ActionResult doubleClick(NodeRef ref, Double x, Double y) {
         return Fx.exec(() -> {
-            var node = queryService.findByRef(ref);
-            if (node == null) {
-                return ActionResult.failure("doubleClick", "Node not found: " + ref);
+            var resolved = resolveNode(ref, "doubleClick");
+            if (resolved == null) {
+                return ActionResult.failure("doubleClick", "Node not found or cannot get screen bounds: " + ref);
             }
 
-            bringWindowToFront(node);
-
-            var screenBounds = getScreenBounds(node);
-            if (screenBounds == null) {
-                return ActionResult.failure("doubleClick", "Cannot get screen bounds for node");
-            }
-
-            double clickX, clickY;
-            if (x != null && y != null) {
-                clickX = screenBounds.getMinX() + x;
-                clickY = screenBounds.getMinY() + y;
-            } else {
-                clickX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
-                clickY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
-            }
-
+            var pos = calculatePosition(resolved.screenBounds(), x, y);
             var robot = getRobot();
-            robot.mouseMove(clickX, clickY);
+            robot.mouseMove(pos.x(), pos.y());
 
-            // Get system double-click interval (default 200ms if not available)
             int doubleClickInterval = getDoubleClickInterval();
 
             // First click
             robot.mousePress(MouseButton.PRIMARY);
             robot.mouseRelease(MouseButton.PRIMARY);
 
-            // Wait a small fraction of the threshold to ensure proper timing
-            try {
-                Thread.sleep(Math.max(10, doubleClickInterval / 4));
-            } catch (InterruptedException ignored) {
-            }
+            // Wait a small fraction of the threshold
+            sleepSafely(Math.max(10, doubleClickInterval / DOUBLE_CLICK_WAIT_DIVISOR));
 
             // Second click
             robot.mousePress(MouseButton.PRIMARY);
@@ -184,29 +236,15 @@ public class ActionExecutor {
      */
     public ActionResult mousePressed(NodeRef ref, String button, Double x, Double y) {
         return Fx.exec(() -> {
-            var node = queryService.findByRef(ref);
-            if (node == null) {
-                return ActionResult.failure("mousePressed", "Node not found: " + ref);
+            var resolved = resolveNode(ref, "mousePressed");
+            if (resolved == null) {
+                return ActionResult.failure("mousePressed", "Node not found or cannot get screen bounds: " + ref);
             }
 
-            bringWindowToFront(node);
-
-            var screenBounds = getScreenBounds(node);
-            if (screenBounds == null) {
-                return ActionResult.failure("mousePressed", "Cannot get screen bounds for node");
-            }
-
-            double clickX, clickY;
-            if (x != null && y != null) {
-                clickX = screenBounds.getMinX() + x;
-                clickY = screenBounds.getMinY() + y;
-            } else {
-                clickX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
-                clickY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
-            }
+            var pos = calculatePosition(resolved.screenBounds(), x, y);
 
             var robot = getRobot();
-            robot.mouseMove(clickX, clickY);
+            robot.mouseMove(pos.x(), pos.y());
             robot.mousePress(parseMouseButton(button));
 
             return ActionResult.success("mousePressed");
@@ -219,22 +257,10 @@ public class ActionExecutor {
     public ActionResult mouseReleased(NodeRef ref, String button, Double x, Double y) {
         return Fx.exec(() -> {
             if (ref != null) {
-                var node = queryService.findByRef(ref);
-                if (node == null) {
-                    return ActionResult.failure("mouseReleased", "Node not found: " + ref);
-                }
-
-                var screenBounds = getScreenBounds(node);
-                if (screenBounds != null) {
-                    double clickX, clickY;
-                    if (x != null && y != null) {
-                        clickX = screenBounds.getMinX() + x;
-                        clickY = screenBounds.getMinY() + y;
-                    } else {
-                        clickX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
-                        clickY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
-                    }
-                    getRobot().mouseMove(clickX, clickY);
+                var resolved = resolveNode(ref, "mouseReleased");
+                if (resolved != null) {
+                    var pos = calculatePosition(resolved.screenBounds(), x, y);
+                    getRobot().mouseMove(pos.x(), pos.y());
                 }
             } else if (x != null && y != null) {
                 getRobot().mouseMove(x, y);
@@ -255,76 +281,59 @@ public class ActionExecutor {
             var mouseButton = parseMouseButton(button);
 
             // Determine start position
-            double startX, startY;
-            if (fromRef != null) {
-                var node = queryService.findByRef(fromRef);
-                if (node == null) {
-                    return ActionResult.failure("drag", "Source node not found: " + fromRef);
-                }
-                bringWindowToFront(node);
-                var screenBounds = getScreenBounds(node);
-                if (screenBounds == null) {
-                    return ActionResult.failure("drag", "Cannot get screen bounds for source node");
-                }
-                if (fromX != null && fromY != null) {
-                    startX = screenBounds.getMinX() + fromX;
-                    startY = screenBounds.getMinY() + fromY;
-                } else {
-                    startX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
-                    startY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
-                }
-            } else if (fromX != null && fromY != null) {
-                startX = fromX;
-                startY = fromY;
-            } else {
-                return ActionResult.failure("drag", "No source specified");
+            ScreenPosition start = resolveStartPosition(fromRef, fromX, fromY);
+            if (start == null) {
+                return ActionResult.failure("drag", "No valid source specified");
             }
 
             // Determine end position
-            double endX, endY;
-            if (toRef != null) {
-                var node = queryService.findByRef(toRef);
-                if (node == null) {
-                    return ActionResult.failure("drag", "Target node not found: " + toRef);
-                }
-                var screenBounds = getScreenBounds(node);
-                if (screenBounds == null) {
-                    return ActionResult.failure("drag", "Cannot get screen bounds for target node");
-                }
-                if (toX != null && toY != null) {
-                    endX = screenBounds.getMinX() + toX;
-                    endY = screenBounds.getMinY() + toY;
-                } else {
-                    endX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
-                    endY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
-                }
-            } else if (toX != null && toY != null) {
-                endX = toX;
-                endY = toY;
-            } else {
-                return ActionResult.failure("drag", "No target specified");
+            ScreenPosition end = resolveEndPosition(toRef, toX, toY);
+            if (end == null) {
+                return ActionResult.failure("drag", "No valid target specified");
             }
 
             // Execute drag sequence
-            robot.mouseMove(startX, startY);
+            robot.mouseMove(start.x(), start.y());
             robot.mousePress(mouseButton);
 
             // Move in steps to trigger proper drag events
-            int steps = 10;
-            for (int i = 1; i <= steps; i++) {
-                double x = startX + (endX - startX) * i / steps;
-                double y = startY + (endY - startY) * i / steps;
-                robot.mouseMove(x, y);
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException ignored) {
-                }
+            for (int i = 1; i <= DRAG_STEPS; i++) {
+                double stepX = start.x() + (end.x() - start.x()) * i / DRAG_STEPS;
+                double stepY = start.y() + (end.y() - start.y()) * i / DRAG_STEPS;
+                robot.mouseMove(stepX, stepY);
+                sleepSafely(DRAG_STEP_DELAY_MS);
             }
 
             robot.mouseRelease(mouseButton);
 
             return ActionResult.success("drag");
         }, fxTimeoutMs);
+    }
+
+    private ScreenPosition resolveStartPosition(NodeRef fromRef, Double fromX, Double fromY) {
+        if (fromRef != null) {
+            var resolved = resolveNode(fromRef, "drag");
+            if (resolved == null) {
+                return null;
+            }
+            return calculatePosition(resolved.screenBounds(), fromX, fromY);
+        } else if (fromX != null && fromY != null) {
+            return new ScreenPosition(fromX, fromY);
+        }
+        return null;
+    }
+
+    private ScreenPosition resolveEndPosition(NodeRef toRef, Double toX, Double toY) {
+        if (toRef != null) {
+            var resolved = resolveNode(toRef, "drag");
+            if (resolved == null) {
+                return null;
+            }
+            return calculatePosition(resolved.screenBounds(), toX, toY);
+        } else if (toX != null && toY != null) {
+            return new ScreenPosition(toX, toY);
+        }
+        return null;
     }
 
     private MouseButton parseMouseButton(String button) {
@@ -342,12 +351,13 @@ public class ActionExecutor {
         try {
             Object interval = java.awt.Toolkit.getDefaultToolkit()
                     .getDesktopProperty("awt.multiClickInterval");
-            if (interval instanceof Integer) {
-                return (Integer) interval;
+            if (interval instanceof Integer i) {
+                return i;
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            LOG.log(Level.FINE, "Could not get double-click interval from system", e);
         }
-        return 200; // Default 200ms
+        return DEFAULT_DOUBLE_CLICK_INTERVAL_MS;
     }
 
     /**
@@ -408,9 +418,10 @@ public class ActionExecutor {
         return Fx.exec(() -> {
             var robot = getRobot();
             var keyCode = KeyCode.valueOf(key.toUpperCase());
+            var effectiveModifiers = modifiers != null ? modifiers : List.<String>of();
 
             // Press modifiers
-            for (var mod : modifiers != null ? modifiers : List.<String>of()) {
+            for (var mod : effectiveModifiers) {
                 var modCode = KeyCode.valueOf(mod.toUpperCase());
                 robot.keyPress(modCode);
             }
@@ -420,7 +431,7 @@ public class ActionExecutor {
             robot.keyRelease(keyCode);
 
             // Release modifiers
-            for (var mod : modifiers != null ? modifiers : List.<String>of()) {
+            for (var mod : effectiveModifiers) {
                 var modCode = KeyCode.valueOf(mod.toUpperCase());
                 robot.keyRelease(modCode);
             }
@@ -434,23 +445,15 @@ public class ActionExecutor {
      */
     public ActionResult scroll(NodeRef ref, int deltaY) {
         return Fx.exec(() -> {
-            var node = queryService.findByRef(ref);
-            if (node == null) {
-                return ActionResult.failure("scroll", "Node not found: " + ref);
+            var resolved = resolveNode(ref, "scroll");
+            if (resolved == null) {
+                return ActionResult.failure("scroll", "Node not found or cannot get screen bounds: " + ref);
             }
 
-            bringWindowToFront(node);
-
-            var screenBounds = getScreenBounds(node);
-            if (screenBounds == null) {
-                return ActionResult.failure("scroll", "Cannot get screen bounds for node");
-            }
-
-            double centerX = screenBounds.getMinX() + screenBounds.getWidth() / 2;
-            double centerY = screenBounds.getMinY() + screenBounds.getHeight() / 2;
+            var pos = calculatePosition(resolved.screenBounds(), null, null);
 
             var robot = getRobot();
-            robot.mouseMove(centerX, centerY);
+            robot.mouseMove(pos.x(), pos.y());
             robot.mouseWheel(deltaY);
 
             return ActionResult.success("scroll");
@@ -474,8 +477,9 @@ public class ActionExecutor {
             } else {
                 window.requestFocus();
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             // Best-effort only; Robot actions will still be attempted.
+            LOG.log(Level.FINE, "Could not bring window to front", e);
         }
     }
 
@@ -509,6 +513,7 @@ public class ActionExecutor {
             ImageIO.write(bufferedImage, "png", baos);
             return Base64.getEncoder().encodeToString(baos.toByteArray());
         } catch (Exception e) {
+            LOG.log(Level.WARNING, "Failed to encode image to base64", e);
             return null;
         }
     }
@@ -517,6 +522,7 @@ public class ActionExecutor {
         try {
             return node.localToScreen(node.getBoundsInLocal());
         } catch (Exception e) {
+            LOG.log(Level.FINE, "Could not get screen bounds for node", e);
             return null;
         }
     }

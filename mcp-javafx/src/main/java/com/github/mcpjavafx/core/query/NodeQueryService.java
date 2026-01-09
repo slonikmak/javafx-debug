@@ -2,17 +2,22 @@ package com.github.mcpjavafx.core.query;
 
 import com.github.mcpjavafx.core.fx.Fx;
 import com.github.mcpjavafx.core.fx.NodeRefService;
-import com.github.mcpjavafx.core.model.*;
+import com.github.mcpjavafx.core.model.Bounds;
+import com.github.mcpjavafx.core.model.LayoutInfo;
+import com.github.mcpjavafx.core.model.NodeRef;
+import com.github.mcpjavafx.util.StringUtils;
 
 import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.*;
+import javafx.scene.control.Labeled;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
@@ -297,7 +302,7 @@ public class NodeQueryService {
         int stageIndex;
         try {
             stageIndex = Integer.parseInt(
-                stagesPart.substring("stages[".length(), stagesPart.length() - 1));
+                    stagesPart.substring("stages[".length(), stagesPart.length() - 1));
         } catch (Exception e) {
             return null;
         }
@@ -338,7 +343,7 @@ public class NodeQueryService {
         int index;
         try {
             index = Integer.parseInt(
-                pathPart.substring(bracketIdx + 1, pathPart.length() - 1));
+                    pathPart.substring(bracketIdx + 1, pathPart.length() - 1));
         } catch (Exception e) {
             return null;
         }
@@ -391,24 +396,17 @@ public class NodeQueryService {
                 captureLayout(node));
     }
 
-    private String buildPath(Node node, List<Stage> stages) {
-        return nodeRefService.buildPath(node, stages);
-    }
-
-    private int getChildIndex(Parent parent, Node child) {
-        // ... (can be removed if not used elsewhere, let's see)
-        return 0; // dummy
-    }
+    private static final int SUMMARY_MAX_LENGTH = 20;
 
     private String buildSummary(Node node) {
         var sb = new StringBuilder(node.getClass().getSimpleName());
         var hasDetails = false;
 
         if (node instanceof Labeled labeled && labeled.getText() != null && !labeled.getText().isEmpty()) {
-            sb.append("[text=").append(truncate(labeled.getText(), 20));
+            sb.append("[text=").append(StringUtils.truncate(labeled.getText(), SUMMARY_MAX_LENGTH));
             hasDetails = true;
         } else if (node instanceof TextInputControl input && input.getText() != null) {
-            sb.append("[text=").append(truncate(input.getText(), 20));
+            sb.append("[text=").append(StringUtils.truncate(input.getText(), SUMMARY_MAX_LENGTH));
             hasDetails = true;
         }
 
@@ -427,12 +425,6 @@ public class NodeQueryService {
         }
 
         return sb.toString();
-    }
-
-    private String truncate(String s, int maxLen) {
-        if (s.length() <= maxLen)
-            return s;
-        return s.substring(0, maxLen - 3) + "...";
     }
 
     private LayoutInfo captureLayout(Node node) {
