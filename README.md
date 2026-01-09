@@ -10,8 +10,8 @@ For detailed documentation, see:
 
 ### 1. Download Agent
 
-1. Download `mcp-javafx-X.X.X.jar` from [Releases](https://github.com/mcp-javafx/mcp-javafx-debug/releases).
-2. Place it in your project directory (e.g., `libs/mcp-javafx.jar`).
+1. Download `mcp-javafx-1.0.0-agent.jar` from [Releases](https://github.com/mcp-javafx/mcp-javafx-debug/releases).
+2. Place it in your project directory (e.g., `libs/mcp-javafx-agent.jar`).
 
 ### 2. Run Application
 
@@ -20,10 +20,16 @@ You can run your application with the agent using either the command line or Mav
 #### Method A: Command Line
 
 ```bash
-java -Dmcp.ui=true -Dmcp.port=55667 -javaagent:libs/mcp-javafx.jar -jar your-app.jar
+java -Dmcp.ui=true -Dmcp.port=55667 -javaagent:libs/mcp-javafx-agent.jar -jar your-app.jar
 ```
 
-#### Method B: Maven Profile (Recommended)
+**Note**: By default, the agent requires a Bearer token. You can disable this for local testing with `-Dmcp.auth=false`.
+
+### 3. Usage
+
+Once the agent is running, the application will provide an MCP endpoint (defaulting to port `55667`). You can connect to it using any MCP client.
+
+For detailed command-line options and protocol details, see the [User Manual](docs/manual.md).
 
 Using a profile is convenient for repeated runs and ensures missing dependencies are included.
 

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: windows-latest # Windows is often better for JavaFX / TestFX stability
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn -B clean verify
+        env:
+          # Enable headless mode for JavaFX tests
+          JAVA_TOOL_OPTIONS: "-Dglass.platform=Monocle -Dmonocle.platform=Headless -Dprism.order=sw"
+          # Maven options
+          MAVEN_OPTS: "-Xmx2g"
+
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: "**/target/surefire-reports/*"
+          retention-days: 5
